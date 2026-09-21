@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:model_viewer_plus/model_viewer_plus.dart';
 import '../models/user_model.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -10,62 +12,162 @@ class ProfileScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('내 캐릭터 & 상점'),
+        title: const Text('내 캐릭터'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 유저 정보 카드
-            Card(
-              color: Colors.indigo.shade50,
-              child: ListTile(
-                leading: const Icon(Icons.person, size: 40, color: Colors.indigo),
-                title: Text(
-                  userData.nickname,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text('레벨: Lv.${userData.level} | 보유 골드: ${userData.gold} G'),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // 현재 장착 장비
-            const Text(
-              '현재 장착 장비',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.shield, color: Colors.amber),
-                title: Text(userData.equipment),
-                subtitle: const Text('현재 적용 중인 무기입니다.'),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // 상점 영역
-            const Text(
-              '장비 상점',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.shopping_bag, color: Colors.redAccent),
-                title: const Text('강철 검'),
-                subtitle: const Text('공격력 +10 | 가격: 100 G'),
-                trailing: ElevatedButton(
-                  onPressed: () {
-                    // 추후 장비 구매 기능 연결 위치
-                  },
-                  child: const Text('구매'),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Stack(
+            children: [
+              // 1. 중앙 3D 캐릭터 모델 배치 영역 (웹/모바일 경로 분기 적용)
+              Center(
+                child: SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.55,
+                  child: ModelViewer(
+                    src: kIsWeb
+                        ? 'assets/assets/models/Untitled.glb'
+                        : 'assets/models/Untitled.glb',
+                    alt: '3D 캐릭터 모델',
+                    autoRotate: true,
+                    cameraControls: true,
+                  ),
                 ),
               ),
-            ),
-          ],
+
+              // 2. 우측 상단 유저 정보 표시 영역
+              Positioned(
+                top: 0,
+                right: 0,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '골드 : ${userData.gold}G',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '경험치 : 4ex',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      '장착중인 장비',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      userData.equipment,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: const [
+                        Icon(Icons.shield_outlined, size: 30),
+                        SizedBox(width: 8),
+                        Icon(Icons.colorize, size: 30),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              // 3. 좌측 하단 잡화점 버튼
+              Positioned(
+                bottom: 10,
+                left: 0,
+                child: InkWell(
+                  onTap: () {},
+                  borderRadius: BorderRadius.circular(30),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.white, width: 2),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white24,
+                          ),
+                          child: const Text(
+                            '잡화점',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Text(
+                              '다음 단계의',
+                              style: TextStyle(fontSize: 11, color: Colors.grey),
+                            ),
+                            Text(
+                              '장비 무기 명',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // 4. 우측 하단 집 영역
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: () {},
+                  child: Container(
+                    width: 130,
+                    height: 120,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.white, width: 2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        '나중에\n만들\n길드 및\n인테리어가\n가능한 집',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 11, height: 1.2),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

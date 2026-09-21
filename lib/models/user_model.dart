@@ -18,7 +18,7 @@ class UserModel {
       nickname: map['nickname'] ?? '이름없음',
       level: map['level'] ?? 1,
       gold: map['gold'] ?? 0,
-      equipment: map['equipment'] ?? '기본 무기',
+      equipment: map['equipment'] ?? '착용 무구 없음',
       myRank: map['myRank'] ?? 0,
     );
   }
