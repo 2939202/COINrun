@@ -4,8 +4,8 @@ import '../models/run_record.dart';
 // 게임 규칙: 러닝 기록 -> 골드/경험치/레벨
 // 보상 기준을 바꿀 때는 이 파일만 고치면 됩니다.
 //
-// TODO(2단계): 기획대로 "움직인 시간 -> 경험치", "걸음 수 -> 골드"로 교체.
-//              지금은 동료 코드와 같은 임시 규칙(100m마다 10골드 + 50EXP)입니다.
+//   - 경험치: 실제로 움직인 시간 1분당 10 EXP  (Lv.1 -> 2는 약 10분)
+//   - 골드: 10걸음당 1골드                     (5km 러닝 약 6,000걸음 -> 600골드)
 // ============================================================
 
 // 러닝 한 번으로 얻은 보상 (완료 리포트에 표시)
@@ -28,15 +28,13 @@ class RunReward {
 class RunRules {
   RunRules._();
 
-  static const double _metersPerReward = 100;
-  static const int _goldPerReward = 10;
-  static const int _expPerReward = 50;
-
-  static int goldFor(RunRecord run) =>
-      (run.distanceMeters ~/ _metersPerReward) * _goldPerReward;
+  static const int expPerMovingMinute = 10;
+  static const int stepsPerGold = 10;
 
   static int expFor(RunRecord run) =>
-      (run.distanceMeters ~/ _metersPerReward) * _expPerReward;
+      run.movingTime.inSeconds * expPerMovingMinute ~/ 60;
+
+  static int goldFor(RunRecord run) => run.steps ~/ stepsPerGold;
 
   // 다음 레벨까지 필요한 경험치
   static int expToNextLevel(int level) => level * 100;

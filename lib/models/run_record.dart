@@ -1,9 +1,18 @@
-// 러닝 한 번의 기록 (시간 + 거리)과, 그걸로 계산하는 페이스/칼로리
+// 러닝 한 번의 기록과, 그걸로 계산하는 페이스/칼로리
 class RunRecord {
-  final Duration elapsed;
+  final Duration elapsed; // 시작~완료 전체 시간 (일시정지 제외)
+  final Duration movingTime; // 실제로 움직인 시간 -> 경험치 기준
   final double distanceMeters;
+  final int steps; // 걸음 수 -> 골드 기준
+  final bool stepsEstimated; // 걸음 센서가 없어 거리로 추정한 값인지
 
-  const RunRecord({required this.elapsed, required this.distanceMeters});
+  const RunRecord({
+    required this.elapsed,
+    required this.movingTime,
+    required this.distanceMeters,
+    required this.steps,
+    required this.stepsEstimated,
+  });
 
   double get distanceKm => distanceMeters / 1000;
 

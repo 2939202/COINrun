@@ -8,9 +8,11 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../game/run_rules.dart';
+import '../game/run_tracker.dart';
 import '../models/run_record.dart';
 import '../models/user_model.dart';
 import '../services/location_service.dart';
+import '../services/step_service.dart';
 import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
@@ -25,8 +27,6 @@ import '../widgets/stat_block.dart';
 //   - 개발 모드(kDebugMode)에서만 밖에 나가지 않고 시험할 수 있는
 //     시뮬레이터(방향 버튼)를 켤 수 있습니다. 출시 버전에는 보이지 않습니다.
 // ============================================================
-
-enum RunState { idle, running, paused }
 
 enum MoveDirection { up, down, left, right }
 
@@ -48,12 +48,10 @@ class _RunScreenState extends State<RunScreen> {
   StreamSubscription<Position>? _positionSubscription;
   LatLng? _currentPosition; // 아직 GPS를 못 받았으면 null
 
-  // 러닝 세션
-  RunState _runState = RunState.idle;
-  final Stopwatch _stopwatch = Stopwatch(); // 일시정지 후 재개해도 시간이 이어집니다.
+  // 러닝 세션 (거리/움직인 시간/걸음 수 계산은 RunTracker가 담당)
+  final RunTracker _tracker = RunTracker();
+  StreamSubscription<int>? _stepSubscription;
   Timer? _uiTimer; // 1초마다 화면을 다시 그리기만 하는 타이머
-  double _distance = 0; // 이번 러닝 거리 (m)
-  List<LatLng> _path = [];
   bool _isSaving = false;
 
   // 개발용 시뮬레이터
@@ -63,19 +61,18 @@ class _RunScreenState extends State<RunScreen> {
 
   LatLng get _position => _currentPosition ?? _defaultPosition;
 
-  RunRecord get _record =>
-      RunRecord(elapsed: _stopwatch.elapsed, distanceMeters: _distance);
-
   @override
   void initState() {
     super.initState();
     // 시작 전에도 지도에 내 위치가 보이도록 바로 GPS를 켭니다.
     _startGps();
+    _startStepSensor();
   }
 
   @override
   void dispose() {
     _positionSubscription?.cancel();
+    _stepSubscription?.cancel();
     _uiTimer?.cancel();
     _simulatorTimer?.cancel();
     super.dispose();
@@ -109,58 +106,55 @@ class _RunScreenState extends State<RunScreen> {
 
   // GPS든 시뮬레이터든 새 위치는 모두 여기로 들어옵니다.
   void _onNewPosition(LatLng newPosition) {
-    final LatLng? previous = _currentPosition;
-
     setState(() {
       _currentPosition = newPosition;
-      // 달리는 중일 때만 거리와 경로를 기록합니다.
-      if (_runState == RunState.running) {
-        if (previous != null) {
-          _distance += LocationService.distanceBetween(
-            previous.latitude,
-            previous.longitude,
-            newPosition.latitude,
-            newPosition.longitude,
-          );
-        }
-        _path.add(newPosition);
-      }
+      _tracker.addPosition(newPosition, DateTime.now());
     });
-
     _mapController.move(newPosition, _zoom);
+  }
+
+  // ----------------------------------------------------------
+  // 걸음 센서
+  // ----------------------------------------------------------
+  Future<void> _startStepSensor() async {
+    final bool granted = await StepService.ensurePermission();
+    if (!mounted) return;
+    if (!granted) {
+      // 센서를 못 쓰면 RunTracker가 거리로 걸음 수를 추정합니다.
+      if (StepService.isSupported) {
+        _showMessage('걸음 수 권한이 없어서 거리로 걸음 수를 추정해요.');
+      }
+      return;
+    }
+    _stepSubscription = StepService.stepCountStream().listen(
+      (steps) => setState(() => _tracker.addSensorSteps(steps)),
+      onError: (Object error) => debugPrint('걸음 센서 오류: $error'),
+    );
   }
 
   // ----------------------------------------------------------
   // 러닝 세션 (시작 / 일시정지 / 재개 / 완료)
   // ----------------------------------------------------------
   void _start() {
-    setState(() {
-      _runState = RunState.running;
-      _distance = 0;
-      _path = [_position];
-    });
-    _stopwatch
-      ..reset()
-      ..start();
+    setState(() => _tracker.start(_position, DateTime.now()));
     _startUiTimer();
   }
 
   void _pause() {
-    _stopwatch.stop();
     _uiTimer?.cancel();
-    setState(() => _runState = RunState.paused);
+    setState(_tracker.pause);
   }
 
   void _resume() {
-    _stopwatch.start();
+    setState(() => _tracker.resume(DateTime.now()));
     _startUiTimer();
-    setState(() => _runState = RunState.running);
   }
 
   Future<void> _finish() async {
-    _stopwatch.stop();
     _uiTimer?.cancel();
-    final RunRecord record = _record; // 초기화하기 전에 최종 기록을 담아둡니다.
+    // 저장하는 동안 시간이 흐르지 않도록 먼저 멈추고 최종 기록을 담아둡니다.
+    if (_tracker.state == RunState.running) _tracker.pause();
+    final RunRecord record = _tracker.record;
 
     setState(() => _isSaving = true);
     try {
@@ -171,20 +165,14 @@ class _RunScreenState extends State<RunScreen> {
       if (!mounted) return;
 
       setState(() {
-        _runState = RunState.idle;
         _isSaving = false;
-        _distance = 0;
-        _path = [];
+        _tracker.reset();
       });
-      _stopwatch.reset();
       _showReport(record, reward);
     } catch (e) {
-      // 저장에 실패하면 기록을 그대로 두고 일시정지 상태로 돌려서 다시 시도할 수 있게 합니다.
+      // 저장에 실패하면 기록을 그대로 두고 일시정지 상태로 두어 다시 시도할 수 있게 합니다.
       if (!mounted) return;
-      setState(() {
-        _runState = RunState.paused;
-        _isSaving = false;
-      });
+      setState(() => _isSaving = false);
       _showMessage('기록 저장에 실패했어요. 인터넷 연결을 확인하고 다시 완료를 눌러주세요.');
     }
   }
@@ -277,7 +265,7 @@ class _RunScreenState extends State<RunScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: _runState == RunState.idle,
+      canPop: _tracker.state == RunState.idle,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _confirmExit();
       },
@@ -322,9 +310,9 @@ class _RunScreenState extends State<RunScreen> {
             ),
             PolylineLayer(
               polylines: [
-                if (_path.length >= 2)
+                if (_tracker.path.length >= 2)
                   Polyline(
-                    points: _path,
+                    points: _tracker.path,
                     strokeWidth: 6,
                     color: AppColors.black,
                   ),
@@ -357,7 +345,7 @@ class _RunScreenState extends State<RunScreen> {
 
   Widget _buildPanel() {
     final textTheme = Theme.of(context).textTheme;
-    final RunRecord record = _record;
+    final RunRecord record = _tracker.record;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -375,16 +363,15 @@ class _RunScreenState extends State<RunScreen> {
           Row(
             children: [
               StatBlock(value: formatKm(record.distanceMeters), label: '킬로미터'),
+              StatBlock(value: '${record.steps}', label: '걸음'),
               StatBlock(
                 value: formatPace(record.paceMinPerKm),
                 label: '평균 페이스',
               ),
-              StatBlock(
-                value: record.calories.toStringAsFixed(0),
-                label: '칼로리',
-              ),
             ],
           ),
+          const SizedBox(height: AppSpacing.lg),
+          _RewardPreview(record: record),
           const Spacer(),
           _buildControls(),
         ],
@@ -400,7 +387,7 @@ class _RunScreenState extends State<RunScreen> {
       );
     }
 
-    switch (_runState) {
+    switch (_tracker.state) {
       case RunState.idle:
         return SizedBox(
           width: double.infinity,
@@ -476,13 +463,20 @@ class _RunScreenState extends State<RunScreen> {
                     value: formatKm(record.distanceMeters),
                     label: '킬로미터',
                   ),
-                  StatBlock(value: formatDuration(record.elapsed), label: '시간'),
                   StatBlock(
-                    value: formatPace(record.paceMinPerKm),
-                    label: '평균 페이스',
+                    value: formatDuration(record.movingTime),
+                    label: '움직인 시간',
                   ),
+                  StatBlock(value: '${record.steps}', label: '걸음'),
                 ],
               ),
+              if (record.stepsEstimated) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  '* 걸음 센서를 쓸 수 없어서 거리로 추정한 걸음 수예요.',
+                  style: textTheme.labelMedium,
+                ),
+              ],
               const SizedBox(height: AppSpacing.lg),
               const Divider(),
               const SizedBox(height: AppSpacing.lg),
@@ -528,6 +522,39 @@ class _RunScreenState extends State<RunScreen> {
 // ------------------------------------------------------------
 // 작은 위젯들
 // ------------------------------------------------------------
+
+// 달리는 중 "지금까지 얻은 보상" 미리보기
+class _RewardPreview extends StatelessWidget {
+  final RunRecord record;
+
+  const _RewardPreview({required this.record});
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm + 4,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.grey100,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Row(
+        children: [
+          Text('움직인 시간 ', style: textTheme.labelMedium),
+          Text(formatDuration(record.movingTime), style: textTheme.titleMedium),
+          const Spacer(),
+          Text(
+            '+${RunRules.expFor(record)} EXP  ·  +${RunRules.goldFor(record)} G',
+            style: textTheme.titleMedium,
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 // 앱바 오른쪽의 레벨/골드 표시 (Firestore 값을 실시간으로 보여줌)
 // 러닝 화면은 1초마다 다시 그려지므로, 스트림을 State에 한 번만 만들어 둡니다.

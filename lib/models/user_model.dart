@@ -8,6 +8,8 @@ class UserModel {
   final int myRank; // 전체 랭킹 순위 (등급 이름은 RunRules.tierName 참고)
   final double totalDistance; // 누적 러닝 거리 (m)
   final int totalRunSeconds; // 누적 러닝 시간 (초)
+  final int totalMovingSeconds; // 누적 "움직인" 시간 (초) - 경험치 기준
+  final int totalSteps; // 누적 걸음 수 - 골드 기준
 
   const UserModel({
     required this.nickname,
@@ -18,6 +20,8 @@ class UserModel {
     required this.myRank,
     required this.totalDistance,
     required this.totalRunSeconds,
+    required this.totalMovingSeconds,
+    required this.totalSteps,
   });
 
   // 새로 가입한 유저의 기본값
@@ -31,6 +35,8 @@ class UserModel {
       myRank: 0,
       totalDistance: 0,
       totalRunSeconds: 0,
+      totalMovingSeconds: 0,
+      totalSteps: 0,
     );
   }
 
@@ -45,6 +51,8 @@ class UserModel {
       myRank: (map['myRank'] as num?)?.toInt() ?? 0,
       totalDistance: (map['totalDistance'] as num?)?.toDouble() ?? 0,
       totalRunSeconds: (map['totalRunSeconds'] as num?)?.toInt() ?? 0,
+      totalMovingSeconds: (map['totalMovingSeconds'] as num?)?.toInt() ?? 0,
+      totalSteps: (map['totalSteps'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -58,6 +66,8 @@ class UserModel {
       'myRank': myRank,
       'totalDistance': totalDistance,
       'totalRunSeconds': totalRunSeconds,
+      'totalMovingSeconds': totalMovingSeconds,
+      'totalSteps': totalSteps,
     };
   }
 }

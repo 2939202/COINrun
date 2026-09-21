@@ -68,12 +68,18 @@ class UserRepository {
         'exp': next.exp,
         'totalDistance': user.totalDistance + run.distanceMeters,
         'totalRunSeconds': user.totalRunSeconds + run.elapsed.inSeconds,
+        'totalMovingSeconds':
+            user.totalMovingSeconds + run.movingTime.inSeconds,
+        'totalSteps': user.totalSteps + run.steps,
       }, SetOptions(merge: true));
 
       // 러닝 기록 보관 (나중에 기록 화면, 랭킹, 부정행위 검사에 사용)
       transaction.set(userDoc.collection('runs').doc(), {
         'distanceMeters': run.distanceMeters,
         'durationSeconds': run.elapsed.inSeconds,
+        'movingSeconds': run.movingTime.inSeconds,
+        'steps': run.steps,
+        'stepsEstimated': run.stepsEstimated, // 센서 없이 추정한 걸음인지 (부정행위 검사용)
         'goldEarned': gold,
         'expEarned': exp,
         'createdAt': FieldValue.serverTimestamp(),
