@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
+import '../game/run_rules.dart';
 import '../models/user_model.dart';
+import '../theme/app_theme.dart';
 
 class ProfileScreen extends StatelessWidget {
   final UserModel userData;
@@ -53,8 +55,8 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      '경험치 : 4ex',
+                    Text(
+                      '경험치 : ${userData.exp} / ${RunRules.expToNextLevel(userData.level)}',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -63,7 +65,7 @@ class ProfileScreen extends StatelessWidget {
                     const SizedBox(height: 12),
                     const Text(
                       '장착중인 장비',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      style: TextStyle(fontSize: 12, color: AppColors.grey500),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -98,7 +100,7 @@ class ProfileScreen extends StatelessWidget {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white, width: 2),
+                      border: Border.all(color: AppColors.black, width: 2),
                       borderRadius: BorderRadius.circular(30),
                     ),
                     child: Row(
@@ -108,7 +110,7 @@ class ProfileScreen extends StatelessWidget {
                           padding: const EdgeInsets.all(8),
                           decoration: const BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Colors.white24,
+                            color: AppColors.grey100,
                           ),
                           child: const Text(
                             '잡화점',
@@ -125,7 +127,10 @@ class ProfileScreen extends StatelessWidget {
                           children: const [
                             Text(
                               '다음 단계의',
-                              style: TextStyle(fontSize: 11, color: Colors.grey),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppColors.grey500,
+                              ),
                             ),
                             Text(
                               '장비 무기 명',
@@ -153,7 +158,7 @@ class ProfileScreen extends StatelessWidget {
                     height: 120,
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white, width: 2),
+                      border: Border.all(color: AppColors.black, width: 2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Center(
