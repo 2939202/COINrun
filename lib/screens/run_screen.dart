@@ -7,8 +7,10 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../game/equipment_rules.dart';
 import '../game/run_rules.dart';
 import '../game/run_tracker.dart';
+import '../models/equipment_set.dart';
 import '../models/run_record.dart';
 import '../models/user_model.dart';
 import '../services/location_service.dart';
@@ -371,7 +373,7 @@ class _RunScreenState extends State<RunScreen> {
             ],
           ),
           const SizedBox(height: AppSpacing.lg),
-          _RewardPreview(record: record),
+          _RewardPreview(userId: widget.userId, record: record),
           const Spacer(),
           _buildControls(),
         ],
@@ -524,14 +526,27 @@ class _RunScreenState extends State<RunScreen> {
 // ------------------------------------------------------------
 
 // 달리는 중 "지금까지 얻은 보상" 미리보기
-class _RewardPreview extends StatelessWidget {
+// 완료 리포트와 숫자가 어긋나지 않도록, 입고 있는 장비 보너스까지 반영해서 보여줍니다.
+// 이 화면은 1초마다 다시 그려지므로 스트림은 State에 한 번만 만들어 둡니다.
+class _RewardPreview extends StatefulWidget {
+  final String userId;
   final RunRecord record;
 
-  const _RewardPreview({required this.record});
+  const _RewardPreview({required this.userId, required this.record});
+
+  @override
+  State<_RewardPreview> createState() => _RewardPreviewState();
+}
+
+class _RewardPreviewState extends State<_RewardPreview> {
+  late final Stream<UserModel?> _userStream = UserRepository.instance.watchUser(
+    widget.userId,
+  );
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final RunRecord record = widget.record;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
@@ -546,9 +561,19 @@ class _RewardPreview extends StatelessWidget {
           Text('움직인 시간 ', style: textTheme.labelMedium),
           Text(formatDuration(record.movingTime), style: textTheme.titleMedium),
           const Spacer(),
-          Text(
-            '+${RunRules.expFor(record)} EXP  ·  +${RunRules.goldFor(record)} G',
-            style: textTheme.titleMedium,
+          StreamBuilder<UserModel?>(
+            stream: _userStream,
+            builder: (context, snapshot) {
+              final UserModel? user = snapshot.data;
+              final EquipmentSet? gear = user == null
+                  ? null
+                  : EquipmentRules.equippedSet(user);
+              return Text(
+                '+${RunRules.expFor(record, gear: gear)} EXP  ·  '
+                '+${RunRules.goldFor(record, gear: gear)} G',
+                style: textTheme.titleMedium,
+              );
+            },
           ),
         ],
       ),

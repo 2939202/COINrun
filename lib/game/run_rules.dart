@@ -1,4 +1,6 @@
+import '../models/equipment_set.dart';
 import '../models/run_record.dart';
+import 'equipment_rules.dart';
 
 // ============================================================
 // 게임 규칙: 러닝 기록 -> 골드/경험치/레벨
@@ -6,6 +8,9 @@ import '../models/run_record.dart';
 //
 //   - 경험치: 실제로 움직인 시간 1분당 10 EXP  (Lv.1 -> 2는 약 10분)
 //   - 골드: 10걸음당 1골드                     (5km 러닝 약 6,000걸음 -> 600골드)
+//
+// 입고 있는 장비 세트가 있으면 여기에 보너스가 더 붙습니다.
+// 보너스 계산은 game/equipment_rules.dart가 담당합니다.
 // ============================================================
 
 // 러닝 한 번으로 얻은 보상 (완료 리포트에 표시)
@@ -31,10 +36,16 @@ class RunRules {
   static const int expPerMovingMinute = 10;
   static const int stepsPerGold = 10;
 
-  static int expFor(RunRecord run) =>
-      run.movingTime.inSeconds * expPerMovingMinute ~/ 60;
+  // gear: 러닝을 마친 시점에 입고 있던 장비 세트. 맨몸이면 null입니다.
+  static int expFor(RunRecord run, {EquipmentSet? gear}) {
+    final int base = run.movingTime.inSeconds * expPerMovingMinute ~/ 60;
+    return EquipmentRules.applyExpBonus(base, gear);
+  }
 
-  static int goldFor(RunRecord run) => run.steps ~/ stepsPerGold;
+  static int goldFor(RunRecord run, {EquipmentSet? gear}) {
+    final int base = run.steps ~/ stepsPerGold;
+    return EquipmentRules.applyGoldBonus(base, gear);
+  }
 
   // 다음 레벨까지 필요한 경험치
   static int expToNextLevel(int level) => level * 100;

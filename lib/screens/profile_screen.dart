@@ -1,14 +1,31 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
+import '../game/equipment_catalog.dart';
+import '../game/equipment_rules.dart';
 import '../game/run_rules.dart';
+import '../models/equipment_set.dart';
 import '../models/user_model.dart';
 import '../theme/app_theme.dart';
+import 'shop_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
+  final String userId;
   final UserModel userData;
 
-  const ProfileScreen({super.key, required this.userData});
+  const ProfileScreen({
+    super.key,
+    required this.userId,
+    required this.userData,
+  });
+
+  // 아직 사지 않은 세트 중 가장 싼 것 = 다음에 노릴 장비. 다 샀으면 null입니다.
+  EquipmentSet? get _nextSet {
+    for (final set in EquipmentCatalog.all) {
+      if (!userData.owns(set.id)) return set;
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,7 +86,7 @@ class ProfileScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      userData.equipment,
+                      EquipmentRules.equippedSetName(userData),
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -92,7 +109,12 @@ class ProfileScreen extends StatelessWidget {
                 bottom: 10,
                 left: 0,
                 child: InkWell(
-                  onTap: () {},
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ShopScreen(userId: userId),
+                    ),
+                  ),
                   borderRadius: BorderRadius.circular(30),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -124,8 +146,8 @@ class ProfileScreen extends StatelessWidget {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Text(
+                          children: [
+                            const Text(
                               '다음 단계의',
                               style: TextStyle(
                                 fontSize: 11,
@@ -133,8 +155,8 @@ class ProfileScreen extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              '장비 무기 명',
-                              style: TextStyle(
+                              _nextSet?.name ?? '전부 갖췄습니다',
+                              style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
                               ),

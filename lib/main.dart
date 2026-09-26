@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart'; //플러터의 기본 UI구성 요소
 import 'package:firebase_core/firebase_core.dart'; //파이어 베이스의 기본 설정을 위한 핵심 패키지
 import 'firebase_options.dart'; //삼성인지 애플인지 판단하고 설정하는 파이어베이스
-import 'screens/main_screen.dart'; //메인 화면
+import 'screens/auth_gate.dart'; //로그인 여부를 보고 화면을 고르는 문지기
 import 'theme/app_theme.dart'; //앱 전체 디자인 기준 (색상, 글꼴, 버튼 모양)
 
 void main() async {
@@ -27,7 +27,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false, //못생긴 디버그 띠 제거해줍니다.
       title: '달리랑 RPG', //앱의 제목을 설정합니다.
       theme: AppTheme.light(), //theme/app_theme.dart에서 정한 디자인을 앱 전체에 적용합니다.
-      home: const MainScreen(), //메인 화면 (screens/main_screen.dart)
+      home: const AuthGate(), //로그인 안 했으면 로그인 화면, 했으면 홈 화면
     );
   }
 }

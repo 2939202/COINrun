@@ -1,0 +1,36 @@
+rules_version = '2';
+
+// ============================================================
+// Firestore 보안 규칙
+//
+// [이 파일은 아직 적용되어 있지 않습니다]
+//   Firebase 콘솔 > Firestore Database > 규칙 에 아래 내용을 붙여넣고 "게시"를 눌러야
+//   실제로 적용됩니다. (또는 firebase deploy --only firestore:rules)
+//
+// [왜 필요한가]
+//   로그인이 붙으면서 계정마다 골드와 레벨이 생겼습니다. 규칙이 없으면
+//   누구나 남의 골드를 읽고 고칠 수 있습니다. 아래 규칙은 "로그인한 사람은
+//   자기 문서만 읽고 쓸 수 있다"로 잠급니다.
+//
+// [나중에 랭킹을 만들 때]
+//   남의 문서도 읽을 수 있어야 하므로 read 조건을 풀어야 합니다. 그때는
+//   닉네임/레벨만 담은 별도 컬렉션을 두고 그쪽만 공개하는 방식이 안전합니다.
+// ============================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // 러닝 기록
+      match /runs/{runId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // 위에서 허용하지 않은 모든 접근은 막습니다.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

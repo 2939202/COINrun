@@ -4,7 +4,11 @@ class UserModel {
   final int level;
   final int exp; // 현재 레벨에서 쌓인 경험치 (레벨업하면 초과분만 남음)
   final int gold;
-  final String equipment;
+
+  // 장비는 세트 단위입니다. (game/equipment_catalog.dart의 id를 저장합니다)
+  final List<String> ownedSetIds; // 사 둔 세트들
+  final String? equippedSetId; // 지금 입고 있는 세트. null이면 맨몸입니다.
+
   final int myRank; // 전체 랭킹 순위 (등급 이름은 RunRules.tierName 참고)
   final double totalDistance; // 누적 러닝 거리 (m)
   final int totalRunSeconds; // 누적 러닝 시간 (초)
@@ -16,7 +20,8 @@ class UserModel {
     required this.level,
     required this.exp,
     required this.gold,
-    required this.equipment,
+    required this.ownedSetIds,
+    required this.equippedSetId,
     required this.myRank,
     required this.totalDistance,
     required this.totalRunSeconds,
@@ -24,14 +29,15 @@ class UserModel {
     required this.totalSteps,
   });
 
-  // 새로 가입한 유저의 기본값
+  // 새로 가입한 유저의 기본값 - 장비 없이 맨몸으로 시작합니다.
   factory UserModel.initial(String nickname) {
     return UserModel(
       nickname: nickname,
       level: 1,
       exp: 0,
       gold: 0,
-      equipment: '기본 장비',
+      ownedSetIds: const [],
+      equippedSetId: null,
       myRank: 0,
       totalDistance: 0,
       totalRunSeconds: 0,
@@ -40,6 +46,8 @@ class UserModel {
     );
   }
 
+  bool owns(String setId) => ownedSetIds.contains(setId);
+
   // Firestore는 숫자를 int/double 구분 없이 줄 수 있어서 num으로 받은 뒤 변환합니다.
   factory UserModel.fromMap(Map<String, dynamic> map) {
     return UserModel(
@@ -47,7 +55,11 @@ class UserModel {
       level: (map['level'] as num?)?.toInt() ?? 1,
       exp: (map['exp'] as num?)?.toInt() ?? 0,
       gold: (map['gold'] as num?)?.toInt() ?? 0,
-      equipment: map['equipment'] ?? '착용 무구 없음',
+      // 장비를 붙이기 전에 만든 문서에는 이 필드가 없어서 빈 목록으로 읽힙니다.
+      ownedSetIds:
+          (map['ownedSetIds'] as List?)?.map((e) => e.toString()).toList() ??
+          const [],
+      equippedSetId: map['equippedSetId'] as String?,
       myRank: (map['myRank'] as num?)?.toInt() ?? 0,
       totalDistance: (map['totalDistance'] as num?)?.toDouble() ?? 0,
       totalRunSeconds: (map['totalRunSeconds'] as num?)?.toInt() ?? 0,
@@ -62,7 +74,8 @@ class UserModel {
       'level': level,
       'exp': exp,
       'gold': gold,
-      'equipment': equipment,
+      'ownedSetIds': ownedSetIds,
+      'equippedSetId': equippedSetId,
       'myRank': myRank,
       'totalDistance': totalDistance,
       'totalRunSeconds': totalRunSeconds,

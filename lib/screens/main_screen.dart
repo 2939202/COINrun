@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../game/equipment_rules.dart';
 import '../game/run_rules.dart';
 import '../models/run_log.dart';
 import '../models/user_model.dart';
@@ -17,14 +18,16 @@ import 'settings_screen.dart'; //설정
 //   화면 맨 아래에는 "러닝 시작" 버튼이 항상 고정되어 있습니다.
 // ============================================================
 class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
+  final String userId;
+
+  const MainScreen({super.key, required this.userId});
 
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
 
 class _MainScreenState extends State<MainScreen> {
-  static const String _userId = UserRepository.testUserId; //테스트 유저 아이디
+  String get _userId => widget.userId; //로그인한 계정의 uid
 
   // 스트림은 한 번만 만들어 둡니다. (build 안에서 만들면 다시 그릴 때마다 새로 연결됨)
   late final Stream<UserModel?> _userStream = UserRepository.instance.watchUser(
@@ -49,7 +52,13 @@ class _MainScreenState extends State<MainScreen> {
         }
 
         final UserModel? user = snapshot.data;
-        if (user == null) return _buildWelcome();
+        // AuthGate가 들여보내기 전에 문서를 만들어 두므로 여기서 null은 거의 없습니다.
+        // (막 만들어진 문서가 도착하기 전 한 순간만 null일 수 있습니다)
+        if (user == null) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
 
         return Scaffold(
           body: SafeArea(
@@ -79,42 +88,6 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // 유저 문서가 아직 없을 때 (로그인 붙이기 전 임시 화면)
-  Widget _buildWelcome() {
-    final textTheme = Theme.of(context).textTheme;
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Spacer(),
-              Text(
-                '달리랑\nRPG',
-                style: textTheme.displayLarge?.copyWith(fontSize: 56),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                '달린 만큼 강해지는 나만의 캐릭터',
-                style: textTheme.bodyLarge?.copyWith(color: AppColors.grey500),
-              ),
-              const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () =>
-                      UserRepository.instance.createUser(_userId, '러너1호'),
-                  child: const Text('테스트 유저로 시작하기'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildHeader(UserModel user) {
     final textTheme = Theme.of(context).textTheme;
     return Row(
@@ -135,7 +108,7 @@ class _MainScreenState extends State<MainScreen> {
         _GoldPill(gold: user.gold),
         IconButton(
           tooltip: '설정',
-          onPressed: () => _open(const SettingsScreen()),
+          onPressed: () => _open(SettingsScreen(userId: _userId)),
           icon: const Icon(Icons.settings_outlined),
         ),
       ],
@@ -172,8 +145,9 @@ class _MainScreenState extends State<MainScreen> {
           child: _ShortcutCard(
             icon: Icons.shield_outlined,
             title: '내 캐릭터',
-            subtitle: user.equipment,
-            onTap: () => _open(ProfileScreen(userData: user)),
+            subtitle: EquipmentRules.equippedSetName(user),
+            onTap: () =>
+                _open(ProfileScreen(userId: _userId, userData: user)),
           ),
         ),
         const SizedBox(width: AppSpacing.md),
@@ -238,7 +212,7 @@ class _MainScreenState extends State<MainScreen> {
       child: SizedBox(
         height: 64,
         child: ElevatedButton.icon(
-          onPressed: () => _open(const RunScreen(userId: _userId)),
+          onPressed: () => _open(RunScreen(userId: _userId)),
           icon: const Icon(Icons.play_arrow_rounded, size: 32),
           label: const Text('러닝 시작'),
           style: ElevatedButton.styleFrom(

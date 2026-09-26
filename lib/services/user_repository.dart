@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../game/equipment_catalog.dart';
+import '../game/equipment_rules.dart';
 import '../game/run_rules.dart';
+import '../models/equipment_set.dart';
 import '../models/run_log.dart';
 import '../models/run_record.dart';
 import '../models/user_model.dart';
@@ -14,9 +17,6 @@ class UserRepository {
   UserRepository._();
 
   static final UserRepository instance = UserRepository._();
-
-  // 로그인 기능을 붙이기 전까지 사용하는 테스트 유저
-  static const String testUserId = 'user_test_01';
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -44,8 +44,19 @@ class UserRepository {
         );
   }
 
-  Future<void> createUser(String userId, String nickname) {
-    return _userDoc(userId).set(UserModel.initial(nickname).toMap());
+  // 로그인 직후에 부릅니다. 문서가 없을 때만 새로 만들고, 이미 있으면 아무것도 하지 않습니다.
+  // (이미 있는데 set()으로 덮어쓰면 모아둔 골드와 레벨이 날아갑니다)
+  Future<void> ensureUser(String userId, String nickname) async {
+    final userDoc = _userDoc(userId);
+    final snapshot = await userDoc.get();
+    if (snapshot.exists) return;
+    await userDoc.set(UserModel.initial(nickname).toMap());
+  }
+
+  Future<void> updateNickname(String userId, String nickname) {
+    return _userDoc(userId).set({
+      'nickname': nickname,
+    }, SetOptions(merge: true));
   }
 
   // 러닝 완료 시 호출: 보상을 계산해서 유저 문서에 더하고, 러닝 기록도 남깁니다.
@@ -58,8 +69,10 @@ class UserRepository {
       final snapshot = await transaction.get(userDoc);
       final user = UserModel.fromMap(snapshot.data() ?? {});
 
-      final int gold = RunRules.goldFor(run);
-      final int exp = RunRules.expFor(run);
+      // 러닝을 마친 시점에 입고 있던 장비 세트의 보너스를 얹어줍니다.
+      final EquipmentSet? gear = EquipmentRules.equippedSet(user);
+      final int gold = RunRules.goldFor(run, gear: gear);
+      final int exp = RunRules.expFor(run, gear: gear);
       final next = RunRules.addExp(user.level, user.exp, exp);
 
       transaction.set(userDoc, {
@@ -82,6 +95,7 @@ class UserRepository {
         'stepsEstimated': run.stepsEstimated, // 센서 없이 추정한 걸음인지 (부정행위 검사용)
         'goldEarned': gold,
         'expEarned': exp,
+        'gearSetId': gear?.id, // 어떤 장비를 입고 뛰었는지 (나중에 기록 화면에서 사용)
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -93,4 +107,63 @@ class UserRepository {
       );
     });
   }
+
+  // ----------------------------------------------------------
+  // 장비 세트 구매 / 장착
+  // ----------------------------------------------------------
+
+  // 세트를 삽니다. 골드를 빼고, 보유 목록에 넣고, 바로 입혀줍니다.
+  // 트랜잭션인 이유: 버튼을 빠르게 두 번 눌러도 골드가 두 번 빠지지 않게 하기 위해서입니다.
+  Future<EquipmentSet> buySet(String userId, String setId) {
+    final EquipmentSet? set = EquipmentCatalog.byId(setId);
+    if (set == null) throw EquipmentException('없는 장비 세트입니다.');
+
+    final userDoc = _userDoc(userId);
+
+    return _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(userDoc);
+      if (!snapshot.exists) throw EquipmentException('유저 정보를 찾을 수 없습니다.');
+
+      final user = UserModel.fromMap(snapshot.data()!);
+      final check = EquipmentRules.checkPurchase(user, set);
+      if (!check.isOk) throw EquipmentException(check.message(set));
+
+      transaction.set(userDoc, {
+        'gold': user.gold - set.price,
+        'ownedSetIds': [...user.ownedSetIds, set.id],
+        'equippedSetId': set.id,
+      }, SetOptions(merge: true));
+
+      return set;
+    });
+  }
+
+  // 이미 사 둔 세트로 갈아입습니다. setId가 null이면 벗습니다.
+  Future<void> equipSet(String userId, String? setId) {
+    final userDoc = _userDoc(userId);
+
+    return _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(userDoc);
+      if (!snapshot.exists) throw EquipmentException('유저 정보를 찾을 수 없습니다.');
+
+      final user = UserModel.fromMap(snapshot.data()!);
+      if (setId != null && !user.owns(setId)) {
+        throw EquipmentException('가지고 있지 않은 장비 세트입니다.');
+      }
+
+      transaction.set(userDoc, {
+        'equippedSetId': setId,
+      }, SetOptions(merge: true));
+    });
+  }
+}
+
+// 구매/장착이 실패한 이유를 화면에 그대로 보여주기 위한 예외
+class EquipmentException implements Exception {
+  final String message;
+
+  const EquipmentException(this.message);
+
+  @override
+  String toString() => message;
 }
