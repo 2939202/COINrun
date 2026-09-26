@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>시안 C · 캐주얼 프렌들리</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+  :root{
+    --bg:#FFF8EF; --ink:#23201C; --sub:#8B8177; --card:#FFFFFF; --line:#23201C;
+    --coral:#FF6B4A; --mint:#2EC4B6; --yellow:#FFD23F; --sky:#8ECDF7; --page:#FBEBD8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Pretendard,system-ui,sans-serif;background:var(--page);color:var(--ink);padding:40px 16px 60px}
+  .intro{max-width:1140px;margin:0 auto 32px}
+  .intro .tag{display:inline-block;background:var(--coral);color:#fff;font-weight:800;font-size:13px;padding:6px 12px;border-radius:999px;border:2px solid var(--line)}
+  .intro h1{font-size:40px;font-weight:900;letter-spacing:-1.5px;margin:12px 0 8px}
+  .intro p{color:#5E554C;font-size:16px;line-height:1.6;max-width:720px}
+  .intro ul{margin-top:12px;padding-left:18px;color:#5E554C;line-height:1.8;font-size:15px}
+  .row{display:flex;gap:36px;justify-content:center;flex-wrap:wrap}
+  .shot{display:flex;flex-direction:column;align-items:center;gap:14px}
+  .shot figcaption{font-weight:700;font-size:15px}
+  .phone{width:360px;height:760px;border-radius:46px;border:10px solid var(--ink);background:var(--bg);overflow:hidden;position:relative;box-shadow:10px 12px 0 rgba(35,32,28,.9)}
+  .status{height:40px;display:flex;justify-content:space-between;align-items:center;padding:0 24px;font-size:13px;font-weight:700}
+  .scroll{padding:0 18px}
+  .box{background:var(--card);border:2.5px solid var(--line);border-radius:22px;box-shadow:4px 4px 0 var(--line)}
+
+  .top{display:flex;align-items:center;justify-content:space-between;margin:4px 0 14px}
+  .top h2{font-size:21px;font-weight:900;line-height:1.3}
+  .streak{display:flex;align-items:center;gap:4px;background:var(--yellow);border:2.5px solid var(--line);border-radius:999px;padding:6px 11px;font-weight:900;font-size:14px}
+  .buddy{position:relative;height:250px;background:var(--sky);display:flex;align-items:flex-end;justify-content:center;overflow:hidden}
+  .buddy::before{content:"";position:absolute;left:-20px;right:-20px;bottom:-40px;height:110px;border-radius:50%;background:#8BD48A;border-top:2.5px solid var(--line)}
+  .buddy svg{position:relative;height:200px;margin-bottom:12px}
+  .say{position:absolute;left:16px;top:16px;background:#fff;border:2.5px solid var(--line);border-radius:16px 16px 16px 4px;padding:8px 12px;font-weight:800;font-size:13px}
+  .lvl{position:absolute;right:14px;top:14px;width:62px;height:62px;border-radius:50%;background:conic-gradient(var(--coral) 0 62%,#fff 62% 100%);border:2.5px solid var(--line);display:grid;place-items:center}
+  .lvl div{width:46px;height:46px;border-radius:50%;background:#fff;border:2.5px solid var(--line);display:grid;place-items:center;text-align:center;line-height:1}
+  .lvl small{font-size:9px;font-weight:800;color:var(--sub)}
+  .lvl b{font-size:18px;font-weight:900}
+  .go{margin-top:16px;height:64px;border-radius:20px;background:var(--coral);color:#fff;border:2.5px solid var(--line);box-shadow:4px 4px 0 var(--line);display:flex;align-items:center;justify-content:center;gap:10px;font-weight:900;font-size:20px}
+  .sec{font-size:15px;font-weight:900;margin:18px 0 10px}
+  .todo{padding:6px 14px}
+  .todo div{display:flex;align-items:center;gap:10px;padding:9px 0;font-weight:700;font-size:14px}
+  .todo div + div{border-top:2px dashed #E6DCD0}
+  .ck{width:24px;height:24px;border-radius:8px;border:2.5px solid var(--line);display:grid;place-items:center;font-size:13px;font-weight:900}
+  .ck.on{background:var(--mint);color:#fff}
+  .todo em{margin-left:auto;font-style:normal;font-size:12px;font-weight:900;background:#FFF1C2;border:2px solid var(--line);border-radius:999px;padding:2px 8px}
+  .todo s{color:var(--sub)}
+
+  .map{margin:4px 18px 0;height:300px;border-radius:26px;background:#DFF1E0;position:relative;overflow:hidden}
+  .map svg{position:absolute;inset:0;width:100%;height:100%}
+  .map .buddyPin{position:absolute;left:196px;top:60px;width:56px;height:56px;border-radius:50%;background:#fff;border:2.5px solid var(--line);display:grid;place-items:center;overflow:hidden}
+  .map .buddyPin svg{position:static;width:60px;height:60px;margin-top:22px}
+  .big{text-align:center;margin-top:14px}
+  .big b{font-size:64px;font-weight:900;letter-spacing:-3px;line-height:1}
+  .big span{display:block;font-size:13px;font-weight:700;color:var(--sub)}
+  .chips{display:flex;gap:8px;margin:14px 18px 0}
+  .chips div{flex:1;text-align:center;padding:10px 4px}
+  .chips b{display:block;font-size:19px;font-weight:900}
+  .chips span{font-size:11px;font-weight:700;color:var(--sub)}
+  .earn{margin:12px 18px 0;padding:12px 16px;display:flex;align-items:center;gap:10px;background:#FFF1C2}
+  .earn .cn{width:30px;height:30px;border-radius:50%;background:var(--yellow);border:2.5px solid var(--line);display:grid;place-items:center;font-weight:900;font-size:14px}
+  .earn b{font-size:15px}
+  .earn p{font-size:12px;color:var(--sub);font-weight:700}
+  .earn em{margin-left:auto;font-style:normal;font-weight:900;color:var(--coral)}
+  .btns{display:flex;gap:10px;margin:14px 18px 0}
+  .btns div{flex:1;height:56px;border-radius:18px;border:2.5px solid var(--line);box-shadow:3px 3px 0 var(--line);display:grid;place-items:center;font-weight:900;font-size:16px}
+  .btns .p{background:#fff}.btns .s{background:var(--mint);color:#fff}
+
+  .closet{height:210px;background:#FFE3D8;display:flex;align-items:flex-end;justify-content:flex-end;padding-right:22px;position:relative}
+  .closet svg{height:190px;margin-bottom:8px}
+  .closet .name{position:absolute;left:16px;top:14px}
+  .closet .name b{font-size:20px;font-weight:900;display:block}
+  .closet .name span{font-size:12px;font-weight:700;color:var(--sub)}
+  .pills{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 0}
+  .pills span{font-size:12px;font-weight:800;padding:6px 10px;border-radius:999px;border:2px solid var(--line)}
+  .tabs{display:flex;gap:6px;margin:14px 0 10px}
+  .tabs span{font-size:13px;font-weight:800;padding:7px 12px;border-radius:999px;border:2px solid var(--line);background:#fff}
+  .tabs span.on{background:var(--ink);color:#fff}
+  .items{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .item{padding:10px 6px 8px;text-align:center;position:relative}
+  .item .th{height:48px;border-radius:12px;margin-bottom:6px;border:2px solid var(--line)}
+  .item b{display:block;font-size:12px;font-weight:800}
+  .item span{font-size:11px;font-weight:900;color:var(--coral)}
+  .item.on{background:#E3F7F4}
+  .item .badge{position:absolute;right:-6px;top:-8px;background:var(--mint);color:#fff;border:2px solid var(--line);border-radius:999px;font-size:10px;font-weight:900;padding:2px 6px}
+</style>
+</head>
+<body>
+<section class="intro">
+  <span class="tag">시안 C</span>
+  <h1>캐주얼 프렌들리</h1>
+  <p>포켓몬GO나 듀오링고처럼 "귀여운 캐릭터 친구와 매일 조금씩"이라는 느낌의 방향입니다. 굵은 테두리와 밝은 색으로 부담 없이 시작할 수 있고, 연속 출석과 할 일 목록으로 매일 앱을 열게 만듭니다.</p>
+  <ul>
+    <li>잘 맞는 사용자: 운동 초보, 가볍게 걷는 사람, 가족·학생 등 넓은 연령층</li>
+    <li>장점: 친근하고 진입 장벽이 낮음, 습관 만들기(연속 기록)에 강함</li>
+    <li>약점: "강해진다"는 RPG 성장감이 약해 보일 수 있고, 캐릭터 일러스트 품질이 중요함</li>
+  </ul>
+</section>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="buddy" viewBox="0 0 200 230">
+    <ellipse cx="100" cy="220" rx="50" ry="7" fill="rgba(0,0,0,.15)"/>
+    <rect x="72" y="160" width="22" height="50" rx="11" fill="#23201C"/>
+    <rect x="106" y="160" width="22" height="50" rx="11" fill="#23201C"/>
+    <ellipse cx="80" cy="210" rx="20" ry="11" fill="#FF6B4A" stroke="#23201C" stroke-width="4"/>
+    <ellipse cx="120" cy="210" rx="20" ry="11" fill="#FF6B4A" stroke="#23201C" stroke-width="4"/>
+    <rect x="52" y="110" width="96" height="70" rx="32" fill="#2EC4B6" stroke="#23201C" stroke-width="4"/>
+    <circle cx="100" cy="72" r="56" fill="#FFD9B8" stroke="#23201C" stroke-width="4"/>
+    <path d="M46 70 Q48 16 100 16 Q152 16 154 70 Q140 44 118 40 Q122 54 108 58 Q106 42 88 40 Q70 44 46 70Z" fill="#6B4430" stroke="#23201C" stroke-width="4" stroke-linejoin="round"/>
+    <ellipse cx="80" cy="80" rx="7" ry="9" fill="#23201C"/><ellipse cx="120" cy="80" rx="7" ry="9" fill="#23201C"/>
+    <circle cx="82" cy="77" r="2.5" fill="#fff"/><circle cx="122" cy="77" r="2.5" fill="#fff"/>
+    <ellipse cx="66" cy="98" rx="9" ry="6" fill="#FF9E8A"/><ellipse cx="134" cy="98" rx="9" ry="6" fill="#FF9E8A"/>
+    <path d="M88 100 Q100 112 112 100" stroke="#23201C" stroke-width="4" fill="none" stroke-linecap="round"/>
+  </symbol>
+</svg>
+
+<div class="row">
+  <!-- 홈 -->
+  <figure class="shot">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="scroll">
+        <div class="top"><h2>좋은 아침이에요,<br>러너1호님!</h2><span class="streak">🔥 5일</span></div>
+        <div class="buddy box">
+          <span class="say">오늘도 같이 달려볼까?</span>
+          <div class="lvl"><div><small>LV</small><b>2</b></div></div>
+          <svg viewBox="0 0 200 230"><use href="#buddy"/></svg>
+        </div>
+        <div class="go">🏃 달리러 가기</div>
+        <div class="sec">오늘 할 일</div>
+        <div class="todo box">
+          <div><span class="ck on">✓</span><s>앱 열기</s><em>+10 G</em></div>
+          <div><span class="ck"></span>3km 달리기 <small style="color:var(--sub)">(1.9km)</small><em>+100 G</em></div>
+          <div><span class="ck"></span>5,000걸음 걷기<em>+50 G</em></div>
+        </div>
+      </div>
+    </div>
+    <figcaption>홈 — 캐릭터 친구와 오늘 할 일</figcaption>
+  </figure>
+
+  <!-- 러닝 -->
+  <figure class="shot">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="map box">
+        <svg viewBox="0 0 320 300" preserveAspectRatio="none">
+          <g stroke="#FFFFFF" stroke-width="14" fill="none"><path d="M-10 80 H330"/><path d="M-10 220 H330"/><path d="M70 -10 V310"/><path d="M230 -10 V310"/></g>
+          <circle cx="150" cy="150" r="34" fill="#B8E3B9"/>
+          <path d="M70 290 V220 H150 V150 H230 V88" stroke="#FF6B4A" stroke-width="8" stroke-dasharray="1 14" stroke-linecap="round" fill="none"/>
+        </svg>
+        <div class="buddyPin"><svg viewBox="0 0 200 230"><use href="#buddy"/></svg></div>
+      </div>
+      <div class="big"><b>05:32</b><span>달린 시간</span></div>
+      <div class="chips">
+        <div class="box"><b>0.84</b><span>km</span></div>
+        <div class="box"><b>1,102</b><span>걸음</span></div>
+        <div class="box"><b>6'35"</b><span>페이스</span></div>
+      </div>
+      <div class="earn box"><div class="cn">G</div><div><b>+110 골드 모았어요!</b><p>경험치 +55 · 다음 레벨까지 8분</p></div><em>▲</em></div>
+      <div class="btns"><div class="p">잠깐 쉬기</div><div class="s">다 달렸어요</div></div>
+    </div>
+    <figcaption>러닝 — 친근한 말투와 큰 버튼</figcaption>
+  </figure>
+
+  <!-- 캐릭터 -->
+  <figure class="shot">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="scroll">
+        <div class="closet box">
+          <div class="name"><b>러너1호</b><span>Lv.2 · 브론즈 러너</span></div>
+          <svg viewBox="0 0 200 230"><use href="#buddy"/></svg>
+        </div>
+        <div class="pills">
+          <span style="background:#FFD8CF">💪 힘 12</span>
+          <span style="background:#D4F2EE">❤️ 체력 19</span>
+          <span style="background:#FFF1C2">⚡ 속도 9</span>
+        </div>
+        <div class="tabs"><span class="on">신발</span><span>옷</span><span>모자</span><span>소품</span></div>
+        <div class="items">
+          <div class="item box on"><span class="badge">착용</span><div class="th" style="background:#FF6B4A"></div><b>빨간 러닝화</b><span>+5</span></div>
+          <div class="item box"><div class="th" style="background:#8ECDF7"></div><b>하늘 스니커</b><span>300 G</span></div>
+          <div class="item box"><div class="th" style="background:#FFD23F"></div><b>번개 운동화</b><span>800 G</span></div>
+          <div class="item box"><div class="th" style="background:#B8E3B9"></div><b>풀잎 슬립온</b><span>450 G</span></div>
+          <div class="item box"><div class="th" style="background:#C9B6F2"></div><b>보라 트레일</b><span>1,200 G</span></div>
+          <div class="item box" style="opacity:.5"><div class="th" style="background:#eee"></div><b>???</b><span>Lv.5</span></div>
+        </div>
+      </div>
+    </div>
+    <figcaption>캐릭터 — 옷장처럼 고르는 장비</figcaption>
+  </figure>
+</div>
+</body>
+</html>
