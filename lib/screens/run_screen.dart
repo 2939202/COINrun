@@ -222,7 +222,9 @@ class _RunScreenState extends State<RunScreen> {
       _fixCount = 0;
       _droppedByAccuracy = 0;
       _lastFixAt = null;
-      _tracker.start(_position, DateTime.now());
+      // 아직 GPS를 못 잡았으면 null을 넘깁니다. 기본 좌표(서울 시청)를 출발점으로 쓰면
+      // 첫 위치가 들어올 때 거기까지가 한 번에 뛴 것으로 계산돼 통째로 버려집니다.
+      _tracker.start(_currentPosition, DateTime.now());
     });
     _startUiTimer();
   }
@@ -454,6 +456,7 @@ class _RunScreenState extends State<RunScreen> {
               isSimulator: _useSimulator,
               usingForegroundService: _usingForegroundService,
               streamError: _streamError,
+              hasFix: _currentPosition != null,
             ),
           ),
         if (_useSimulator)
@@ -645,6 +648,7 @@ class _GpsDiagnostics extends StatelessWidget {
   final bool isSimulator;
   final bool usingForegroundService;
   final String? streamError;
+  final bool hasFix;
 
   const _GpsDiagnostics({
     required this.fixCount,
@@ -657,6 +661,7 @@ class _GpsDiagnostics extends StatelessWidget {
     required this.isSimulator,
     required this.usingForegroundService,
     required this.streamError,
+    required this.hasFix,
   });
 
   @override
@@ -669,6 +674,8 @@ class _GpsDiagnostics extends StatelessWidget {
         ? '-'
         : '${lastAccuracy!.toStringAsFixed(0)}m';
 
+    final bool stale =
+        last != null && DateTime.now().difference(last).inSeconds > 30;
     final int points = segments.fold(0, (sum, s) => sum + s.length);
     final int drawable = segments.where((s) => s.length >= 2).length;
 
@@ -702,7 +709,14 @@ class _GpsDiagnostics extends StatelessWidget {
               '오차로 버림 $droppedByAccuracy  ·  멀어서 버림 $rejectedJumps',
             ),
             if (!isSimulator)
-              Text('백그라운드 기록 ${usingForegroundService ? "켜짐" : "꺼짐"}'),
+              Text(
+                '백그라운드 기록 ${usingForegroundService ? "켜짐" : "꺼짐"}  ·  '
+                '내 위치 ${hasFix ? "잡힘" : "아직"}',
+              ),
+            // 5m 이상 움직여야 다음 위치가 옵니다(distanceFilter). 서 있으면 수신이 멈춘
+            // 것처럼 보이는데 고장이 아니라서, 오해하지 않도록 적어둡니다.
+            if (!isSimulator && fixCount > 0 && stale)
+              const Text('가만히 있으면 안 옵니다. 5m 이상 움직여 보세요.'),
             if (streamError != null)
               Text(
                 '오류: $streamError',

@@ -87,13 +87,21 @@ class RunTracker {
     ],
   );
 
-  void start(LatLng startPoint, DateTime now) {
+  // startPoint가 null이면 아직 GPS를 못 잡은 것입니다. 그 상태로도 시작할 수 있고,
+  // 첫 위치가 들어오는 자리를 출발점으로 삼습니다.
+  //
+  // 예전에는 GPS가 없으면 기본 좌표(서울 시청)를 출발점으로 넣었습니다. 그러면 첫 위치가
+  // 들어오는 순간 서울 시청에서 거기까지가 한 번에 뛴 것으로 계산돼서, 멀다는 이유로
+  // 통째로 버려지고 경로가 시작되지 않았습니다.
+  void start(LatLng? startPoint, DateTime now) {
     _state = RunState.running;
     _distance = 0;
     _movingTime = Duration.zero;
-    _segments = [
-      [startPoint],
-    ];
+    _segments = startPoint == null
+        ? []
+        : [
+            [startPoint],
+          ];
     _rejectedJumps = 0;
     _lastPoint = startPoint;
     _lastTime = now;
@@ -141,7 +149,13 @@ class RunTracker {
     _lastPoint = point;
     _lastTime = time;
 
-    if (_state != RunState.running || previous == null) return;
+    if (_state != RunState.running) return;
+
+    // GPS를 못 잡은 채로 시작했으면, 첫 위치가 들어오는 여기가 출발점입니다.
+    if (previous == null) {
+      _segments.add([point]);
+      return;
+    }
 
     final double meters = LocationService.distanceBetween(
       previous.latitude,
@@ -158,6 +172,7 @@ class RunTracker {
     }
 
     _distance += meters;
+    if (_segments.isEmpty) _segments.add([]);
     _segments.last.add(point);
 
     if (previousTime == null) return;

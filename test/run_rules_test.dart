@@ -109,6 +109,24 @@ void main() {
 
     // 조이스틱 모드에서 골드가 거리만 보고 오르는지 확인합니다.
     // run_screen이 하는 일과 같은 순서: 센서값 한 번 수신 -> 시작 -> 조이스틱 켜기 -> 5m씩 이동
+    // GPS를 못 잡은 채로 시작을 누르면 예전에는 기본 좌표(서울 시청)가 출발점이 됐습니다.
+    // 그러면 첫 위치가 들어올 때 거기까지가 한 번에 뛴 것으로 계산돼 통째로 버려졌습니다.
+    test('GPS를 못 잡은 채로 시작하면 첫 위치가 출발점이 된다', () {
+      final tracker = RunTracker()..start(null, t0);
+      expect(tracker.segments, isEmpty);
+
+      // 첫 위치 - 어디든 출발점으로 삼습니다.
+      tracker.addPosition(_north(0), t0.add(const Duration(seconds: 3)));
+      expect(tracker.segments.length, 1);
+      expect(tracker.record.distanceMeters, 0);
+      expect(tracker.rejectedJumps, 0);
+
+      // 그다음부터는 정상으로 쌓입니다.
+      tracker.addPosition(_north(1), t0.add(const Duration(seconds: 8)));
+      expect(tracker.record.distanceMeters, closeTo(11.1, 0.5));
+      expect(tracker.segments.first.length, 2);
+    });
+
     // 화면을 끄고 몇 분 지나면 위치 전달이 끊깁니다. 앱으로 돌아올 때 들어오는
     // 첫 위치는 멀찍이 떨어져 있는데, 그 직선은 실제로 지나온 길이 아닙니다.
     test('신호가 끊겼다 돌아온 먼 점프는 거리에 더하지 않는다', () {
