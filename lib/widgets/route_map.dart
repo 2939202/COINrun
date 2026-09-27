@@ -57,7 +57,14 @@ class RouteMap extends StatelessWidget {
         PolylineLayer(
           polylines: [
             for (final segment in drawable)
-              Polyline(points: segment, strokeWidth: 5, color: AppColors.black),
+              Polyline(
+                points: segment,
+                strokeWidth: 6,
+                // 지도 도로선과 섞이지 않도록 형광색에 검은 테두리를 둘러 그립니다.
+                color: AppColors.volt,
+                borderStrokeWidth: 3,
+                borderColor: AppColors.black,
+              ),
           ],
         ),
         MarkerLayer(
