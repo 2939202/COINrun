@@ -33,7 +33,10 @@ class _ShopScreenState extends State<ShopScreen> {
   bool _isBusy = false; // 버튼을 두 번 누르지 못하게 잠그는 값
 
   // 사기/입기를 실행하고, 결과를 아래쪽 알림 띠로 알려줍니다.
-  Future<void> _run(Future<void> Function() action, String successMessage) async {
+  Future<void> _run(
+    Future<void> Function() action,
+    String successMessage,
+  ) async {
     if (_isBusy) return;
     setState(() => _isBusy = true);
     String message = successMessage;
@@ -135,7 +138,10 @@ class _SetRow extends StatelessWidget {
           style: textTheme.labelMedium,
         ),
         const SizedBox(height: AppSpacing.sm),
-        Text('${set.price} G  ·  Lv.${set.requiredLevel} 이상', style: textTheme.labelMedium),
+        Text(
+          '${set.price} G  ·  Lv.${set.requiredLevel} 이상',
+          style: textTheme.labelMedium,
+        ),
         const SizedBox(height: AppSpacing.md),
         if (isEquipped)
           const Text('입고 있음')
@@ -154,10 +160,7 @@ class _SetRow extends StatelessWidget {
               if (!check.isOk) ...[
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
-                  child: Text(
-                    check.message(set),
-                    style: textTheme.labelMedium,
-                  ),
+                  child: Text(check.message(set), style: textTheme.labelMedium),
                 ),
               ],
             ],

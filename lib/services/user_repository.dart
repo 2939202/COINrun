@@ -8,6 +8,7 @@ import '../models/equipment_set.dart';
 import '../models/run_log.dart';
 import '../models/run_record.dart';
 import '../models/user_model.dart';
+import 'ranking_repository.dart';
 
 // ============================================================
 // 유저 데이터를 Firestore에 읽고 쓰는 곳
@@ -50,14 +51,23 @@ class UserRepository {
   Future<void> ensureUser(String userId, String nickname) async {
     final userDoc = _userDoc(userId);
     final snapshot = await userDoc.get();
-    if (snapshot.exists) return;
-    await userDoc.set(UserModel.initial(nickname).toMap());
+
+    final UserModel user;
+    if (snapshot.exists) {
+      user = UserModel.fromMap(snapshot.data()!);
+    } else {
+      user = UserModel.initial(nickname);
+      await userDoc.set(user.toMap());
+    }
+
+    // 랭킹 목록에 내 정보를 올려둡니다. 로그인할 때마다 하므로,
+    // 랭킹을 붙이기 전부터 쓰던 계정도 처음 들어올 때 목록에 들어옵니다.
+    await RankingRepository.instance.publish(userId, user);
   }
 
-  Future<void> updateNickname(String userId, String nickname) {
-    return _userDoc(userId).set({
-      'nickname': nickname,
-    }, SetOptions(merge: true));
+  Future<void> updateNickname(String userId, String nickname) async {
+    await _userDoc(userId).set({'nickname': nickname}, SetOptions(merge: true));
+    await RankingRepository.instance.renameEntry(userId, nickname);
   }
 
   // 러닝 완료 시 호출: 보상을 계산해서 유저 문서에 더하고, 러닝 기록도 남깁니다.
@@ -76,16 +86,33 @@ class UserRepository {
       final int exp = RunRules.expFor(run, gear: gear);
       final next = RunRules.addExp(user.level, user.exp, exp);
 
+      final double totalDistance = user.totalDistance + run.distanceMeters;
+      final int totalExp = user.totalExp + exp;
+
       transaction.set(userDoc, {
         'gold': user.gold + gold,
         'level': next.level,
         'exp': next.exp,
-        'totalDistance': user.totalDistance + run.distanceMeters,
+        'totalDistance': totalDistance,
         'totalRunSeconds': user.totalRunSeconds + run.elapsed.inSeconds,
         'totalMovingSeconds':
             user.totalMovingSeconds + run.movingTime.inSeconds,
         'totalSteps': user.totalSteps + run.steps,
+        'totalExp': totalExp,
       }, SetOptions(merge: true));
+
+      // 랭킹 목록도 같은 트랜잭션에서 갱신합니다.
+      // 따로 쓰면 한쪽만 성공해서 순위가 실제 기록과 어긋날 수 있습니다.
+      transaction.set(
+        RankingRepository.instance.entryDoc(userId),
+        RankingRepository.entryData(
+          nickname: user.nickname,
+          level: next.level,
+          totalDistance: totalDistance,
+          totalExp: totalExp,
+        ),
+        SetOptions(merge: true),
+      );
 
       // 러닝 기록 보관 (나중에 기록 화면, 랭킹, 부정행위 검사에 사용)
       transaction.set(userDoc.collection('runs').doc(), {
@@ -95,9 +122,9 @@ class UserRepository {
         'steps': run.steps,
         'stepsEstimated': run.stepsEstimated, // 센서 없이 추정한 걸음인지 (부정행위 검사용)
         // 지나온 길. 점이 수천 개라 그대로 담으면 문서가 너무 커져서 솎아내고 저장합니다.
-        'path': RouteSimplifier.simplify(run.path)
-            .map((point) => GeoPoint(point.latitude, point.longitude))
-            .toList(),
+        'path': RouteSimplifier.simplify(
+          run.path,
+        ).map((point) => GeoPoint(point.latitude, point.longitude)).toList(),
         'goldEarned': gold,
         'expEarned': exp,
         'gearSetId': gear?.id, // 어떤 장비를 입고 뛰었는지 (나중에 기록 화면에서 사용)

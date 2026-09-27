@@ -32,8 +32,7 @@ Future<void> showRunReport(
     // 막은 투명하게 두고, 흐림 효과를 우리가 직접 깝니다.
     barrierColor: Colors.transparent,
     transitionDuration: const Duration(milliseconds: 260),
-    pageBuilder: (context, _, _) =>
-        _RunReport(record: record, reward: reward),
+    pageBuilder: (context, _, _) => _RunReport(record: record, reward: reward),
     transitionBuilder: (context, animation, _, child) {
       final curved = CurvedAnimation(parent: animation, curve: Curves.easeOut);
       return FadeTransition(

@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../game/equipment_rules.dart';
 import '../game/run_rules.dart';
+import '../models/ranking_entry.dart';
 import '../models/run_log.dart';
 import '../models/user_model.dart';
+import '../services/ranking_repository.dart';
 import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/stat_block.dart';
 import 'profile_screen.dart'; //프로필
+import 'ranking_screen.dart'; //랭킹
 import 'run_detail_screen.dart'; //러닝 기록 상세
 import 'run_screen.dart'; //달리기 시작
 import 'settings_screen.dart'; //설정
@@ -130,11 +133,7 @@ class _MainScreenState extends State<MainScreen> {
           label: '총 시간',
           alignment: CrossAxisAlignment.start,
         ),
-        StatBlock(
-          value: user.myRank > 0 ? '${user.myRank}위' : '-',
-          label: '순위',
-          alignment: CrossAxisAlignment.start,
-        ),
+        _RankStat(user: user),
       ],
     );
   }
@@ -155,10 +154,8 @@ class _MainScreenState extends State<MainScreen> {
           child: _ShortcutCard(
             icon: Icons.emoji_events_outlined,
             title: '랭킹',
-            subtitle: 'TOP 10 보기',
-            onTap: () {
-              // 랭킹 상세 페이지 이동 로직 위치(비워둠)
-            },
+            subtitle: '전체 순위 보기',
+            onTap: () => _open(RankingScreen(userId: _userId, user: user)),
           ),
         ),
       ],
@@ -235,6 +232,41 @@ class _MainScreenState extends State<MainScreen> {
 // ------------------------------------------------------------
 // 홈 화면 전용 작은 위젯들
 // ------------------------------------------------------------
+
+// 홈의 "순위" 칸
+//
+// 순위는 남들과 비교해야 알 수 있어서 유저 문서에는 없습니다.
+// 화면에 들어올 때 한 번만 물어봅니다. (Firestore의 count 집계라 문서를 받아오지 않습니다)
+class _RankStat extends StatefulWidget {
+  final UserModel user;
+
+  const _RankStat({required this.user});
+
+  @override
+  State<_RankStat> createState() => _RankStatState();
+}
+
+class _RankStatState extends State<_RankStat> {
+  late final Future<int?> _rank = RankingRepository.instance.myRank(
+    RankingKind.distance,
+    widget.user,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<int?>(
+      future: _rank,
+      builder: (context, snapshot) {
+        final int? rank = snapshot.data;
+        return StatBlock(
+          value: rank == null ? '-' : '$rank위',
+          label: '거리 순위',
+          alignment: CrossAxisAlignment.start,
+        );
+      },
+    );
+  }
+}
 
 // 검은 레벨 카드: 큰 레벨 숫자 + 등급 + 경험치 바
 class _LevelCard extends StatelessWidget {

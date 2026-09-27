@@ -76,7 +76,9 @@ class _UserDocGateState extends State<_UserDocGate> {
           return const _Loading();
         }
         if (snapshot.hasError) {
-          return _PrepareFailed(onRetry: () => setState(() => _ready = _prepare()));
+          return _PrepareFailed(
+            onRetry: () => setState(() => _ready = _prepare()),
+          );
         }
         return MainScreen(userId: widget.account.uid);
       },
@@ -106,8 +108,10 @@ class _PrepareFailed extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('내 정보를 불러오지 못했습니다.\n인터넷 연결을 확인해 주세요.',
-                textAlign: TextAlign.center),
+            const Text(
+              '내 정보를 불러오지 못했습니다.\n인터넷 연결을 확인해 주세요.',
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 16),
             ElevatedButton(onPressed: onRetry, child: const Text('다시 시도')),
             TextButton(

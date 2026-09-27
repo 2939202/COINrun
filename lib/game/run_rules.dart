@@ -61,6 +61,20 @@ class RunRules {
     return (level: newLevel, exp: newExp);
   }
 
+  // 지금까지 받은 경험치를 전부 합한 값
+  //
+  // exp는 레벨이 오를 때마다 0으로 돌아가기 때문에, 레벨 랭킹을 매기려면
+  // "여태 얼마나 받았는가"를 따로 구해야 합니다. Lv.1->2가 100, 2->3이 200...이므로
+  // 지금 레벨 전까지 필요했던 양을 모두 더하고 지금 레벨에서 쌓인 만큼을 더합니다.
+  //
+  // 경험치 랭킹을 레벨 대신 쓰는 이유: 같은 레벨이어도 누가 더 앞섰는지 가릴 수 있고,
+  // 숫자 하나로 줄 세울 수 있어서 순위를 세는 질의가 단순해집니다.
+  static int totalExpFor(int level, int exp) {
+    // 100 + 200 + ... + (level-1)*100
+    final int spent = 100 * (level - 1) * level ~/ 2;
+    return spent + exp;
+  }
+
   // 레벨에 따른 등급 이름
   static String tierName(int level) {
     if (level >= 10) return '다이아 러너';

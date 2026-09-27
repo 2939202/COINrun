@@ -467,7 +467,6 @@ class _RunScreenState extends State<RunScreen> {
         );
     }
   }
-
 }
 
 // ------------------------------------------------------------

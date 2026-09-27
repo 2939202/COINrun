@@ -24,7 +24,9 @@ class RunDetailScreen extends StatelessWidget {
     final Duration duration = Duration(seconds: run.durationSeconds);
 
     return Scaffold(
-      appBar: AppBar(title: Text(date == null ? '러닝 기록' : formatMonthDay(date))),
+      appBar: AppBar(
+        title: Text(date == null ? '러닝 기록' : formatMonthDay(date)),
+      ),
       body: ListView(
         children: [
           // 어디를 뛰었는지

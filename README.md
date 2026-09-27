@@ -1,17 +1,55 @@
-# contact
+# 달리랑 RPG
 
-A new Flutter project.
+달린 만큼 캐릭터가 강해지는 러닝 앱입니다. GPS로 달린 거리와 걸음 수를 재고,
+그만큼 골드와 경험치를 받아서 장비를 갖춥니다.
 
-## Getting Started
+## 보상 규칙
 
-This project is a starting point for a Flutter application.
+| 항목 | 기준 |
+|---|---|
+| 경험치 | 실제로 움직인 시간 1분당 10 EXP |
+| 골드 | 10걸음당 1 G |
 
-A few resources to get you started if this is your first Flutter project:
+"움직인 시간"은 걷는 속도(1.0m/s) 이상으로 움직인 시간만 셉니다. 시작만 눌러두고
+서 있으면 경험치가 쌓이지 않습니다. 걸음 수로 골드를 주는 이유는 차를 타고
+벌 수 없게 하기 위해서입니다.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+장비를 입으면 힘만큼 골드가, 체력만큼 경험치가 더 들어옵니다.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 폴더
+
+| 폴더 | 무엇이 들어 있나 |
+|---|---|
+| `lib/game/` | 게임 규칙. 보상 계산, 장비 판정, 러닝 기록 모으기, 경로 솎아내기 |
+| `lib/models/` | 데이터 한 덩어리를 나타내는 클래스 |
+| `lib/services/` | 바깥 세상과 이야기하는 곳. Firebase, GPS, 걸음 센서 |
+| `lib/screens/` | 화면 |
+| `lib/widgets/` | 화면 여러 곳에서 같이 쓰는 조각 |
+| `history/` | 날짜별 작업 이력. 무엇을 왜 그렇게 만들었는지 |
+| `sample/` | UI 디자인 시안 (HTML). 아직 어느 방향으로 갈지 정하지 않았습니다 |
+
+규칙은 화면과 떼어 놓았습니다. 디자인을 새로 만들어도 `lib/game/`은 그대로 씁니다.
+
+## 실행
+
+```bash
+flutter pub get
+flutter run
+```
+
+밖에 나가지 않고 시험하려면, 러닝 화면 오른쪽 위 게임패드 아이콘을 누르면
+방향 버튼이 나옵니다. 개발 빌드에서만 보입니다.
+
+## Firebase 설정
+
+처음 받아서 돌릴 때 콘솔에서 두 가지를 해야 합니다.
+
+1. Authentication > Sign-in method 에서 **익명**과 **이메일/비밀번호** 켜기
+2. Firestore Database > 규칙 에 저장소의 `firestore.rules` 내용 붙여넣고 게시
+
+## 확인
+
+```bash
+flutter analyze
+flutter test
+```

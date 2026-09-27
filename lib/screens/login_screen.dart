@@ -215,7 +215,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 '게스트로 시작해도 나중에 설정에서 이메일을 붙일 수 있어요. '
                 '그때 기록은 그대로 남습니다. '
                 '다만 이메일을 붙이기 전에 앱을 지우면 기록이 사라집니다.',
-                style: textTheme.labelMedium?.copyWith(color: AppColors.grey500),
+                style: textTheme.labelMedium?.copyWith(
+                  color: AppColors.grey500,
+                ),
               ),
             ],
 

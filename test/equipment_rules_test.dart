@@ -17,7 +17,7 @@ UserModel _user({
   gold: gold,
   ownedSetIds: owned,
   equippedSetId: equipped,
-  myRank: 0,
+  totalExp: 0,
   totalDistance: 0,
   totalRunSeconds: 0,
   totalMovingSeconds: 0,

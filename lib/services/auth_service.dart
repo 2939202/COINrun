@@ -32,8 +32,7 @@ class AuthService {
   // 이메일 없이 게스트로 쓰는 중인지
   bool get isGuest => _auth.currentUser?.isAnonymous ?? false;
 
-  Future<User> signInAsGuest() =>
-      _guard(() => _auth.signInAnonymously());
+  Future<User> signInAsGuest() => _guard(() => _auth.signInAnonymously());
 
   Future<User> signUpWithEmail(String email, String password) => _guard(
     () => _auth.createUserWithEmailAndPassword(

@@ -126,7 +126,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             title: Text(isGuest ? '게스트로 이용 중' : '이메일 계정'),
             subtitle: Text(
-              isGuest ? '이메일을 붙이면 폰을 바꿔도 이어서 할 수 있어요.' : (account?.email ?? '-'),
+              isGuest
+                  ? '이메일을 붙이면 폰을 바꿔도 이어서 할 수 있어요.'
+                  : (account?.email ?? '-'),
             ),
             trailing: isGuest
                 ? ElevatedButton(
