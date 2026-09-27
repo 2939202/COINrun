@@ -60,6 +60,7 @@ class RunTracker {
     distanceMeters: _distance,
     steps: steps,
     stepsEstimated: !_hasStepSensor,
+    path: List.unmodifiable(_path),
   );
 
   void start(LatLng startPoint, DateTime now) {

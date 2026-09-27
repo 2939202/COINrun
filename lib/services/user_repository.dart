@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../game/equipment_catalog.dart';
 import '../game/equipment_rules.dart';
+import '../game/route_simplifier.dart';
 import '../game/run_rules.dart';
 import '../models/equipment_set.dart';
 import '../models/run_log.dart';
@@ -93,6 +94,10 @@ class UserRepository {
         'movingSeconds': run.movingTime.inSeconds,
         'steps': run.steps,
         'stepsEstimated': run.stepsEstimated, // 센서 없이 추정한 걸음인지 (부정행위 검사용)
+        // 지나온 길. 점이 수천 개라 그대로 담으면 문서가 너무 커져서 솎아내고 저장합니다.
+        'path': RouteSimplifier.simplify(run.path)
+            .map((point) => GeoPoint(point.latitude, point.longitude))
+            .toList(),
         'goldEarned': gold,
         'expEarned': exp,
         'gearSetId': gear?.id, // 어떤 장비를 입고 뛰었는지 (나중에 기록 화면에서 사용)

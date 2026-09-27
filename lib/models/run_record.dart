@@ -1,3 +1,5 @@
+import 'package:latlong2/latlong.dart';
+
 // 러닝 한 번의 기록과, 그걸로 계산하는 페이스/칼로리
 class RunRecord {
   final Duration elapsed; // 시작~완료 전체 시간 (일시정지 제외)
@@ -5,6 +7,7 @@ class RunRecord {
   final double distanceMeters;
   final int steps; // 걸음 수 -> 골드 기준
   final bool stepsEstimated; // 걸음 센서가 없어 거리로 추정한 값인지
+  final List<LatLng> path; // 지나온 길. 완료 리포트와 기록 상세의 지도에 그립니다.
 
   const RunRecord({
     required this.elapsed,
@@ -12,6 +15,7 @@ class RunRecord {
     required this.distanceMeters,
     required this.steps,
     required this.stepsEstimated,
+    this.path = const [],
   });
 
   double get distanceKm => distanceMeters / 1000;

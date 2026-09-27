@@ -19,6 +19,7 @@ import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/stat_block.dart';
+import 'run_report.dart';
 
 // ============================================================
 // RunScreen: 지도 + 러닝 기록 화면
@@ -43,10 +44,14 @@ class RunScreen extends StatefulWidget {
 
 class _RunScreenState extends State<RunScreen> {
   static const LatLng _defaultPosition = LatLng(37.5665, 126.9780); // 서울 시청
-  static const double _zoom = 17;
+  static const double _initialZoom = 17;
 
   // 위치
   final MapController _mapController = MapController();
+
+  // 지도가 화면에 올라온 뒤에야 현재 배율을 읽을 수 있습니다.
+  // (올라오기 전에 _mapController.camera를 읽으면 오류가 납니다)
+  bool _isMapReady = false;
   StreamSubscription<Position>? _positionSubscription;
   LatLng? _currentPosition; // 아직 GPS를 못 받았으면 null
 
@@ -112,8 +117,14 @@ class _RunScreenState extends State<RunScreen> {
       _currentPosition = newPosition;
       _tracker.addPosition(newPosition, DateTime.now());
     });
-    _mapController.move(newPosition, _zoom);
+    // 내 위치를 화면 가운데에 둡니다. 배율은 지금 화면에 맞춰진 값을 그대로 씁니다.
+    // (예전에는 여기서 _initialZoom을 넘겨서, 손으로 확대해도 다음 위치가
+    //  들어오는 순간 원래 배율로 되돌아갔습니다)
+    _mapController.move(newPosition, _currentZoom);
   }
+
+  double get _currentZoom =>
+      _isMapReady ? _mapController.camera.zoom : _initialZoom;
 
   // ----------------------------------------------------------
   // 걸음 센서
@@ -170,7 +181,7 @@ class _RunScreenState extends State<RunScreen> {
         _isSaving = false;
         _tracker.reset();
       });
-      _showReport(record, reward);
+      showRunReport(context, record, reward);
     } catch (e) {
       // 저장에 실패하면 기록을 그대로 두고 일시정지 상태로 두어 다시 시도할 수 있게 합니다.
       if (!mounted) return;
@@ -315,7 +326,11 @@ class _RunScreenState extends State<RunScreen> {
       children: [
         FlutterMap(
           mapController: _mapController,
-          options: MapOptions(initialCenter: _position, initialZoom: _zoom),
+          options: MapOptions(
+            initialCenter: _position,
+            initialZoom: _initialZoom,
+            onMapReady: () => _isMapReady = true,
+          ),
           children: [
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -453,83 +468,6 @@ class _RunScreenState extends State<RunScreen> {
     }
   }
 
-  // 러닝 완료 리포트
-  void _showReport(RunRecord record, RunReward reward) {
-    final textTheme = Theme.of(context).textTheme;
-
-    showModalBottomSheet(
-      context: context,
-      isDismissible: false,
-      enableDrag: false,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('러닝 완료', style: textTheme.headlineMedium),
-              const SizedBox(height: AppSpacing.lg),
-              Row(
-                children: [
-                  StatBlock(
-                    value: formatKm(record.distanceMeters),
-                    label: '킬로미터',
-                  ),
-                  StatBlock(
-                    value: formatDuration(record.movingTime),
-                    label: '움직인 시간',
-                  ),
-                  StatBlock(value: '${record.steps}', label: '걸음'),
-                ],
-              ),
-              if (record.stepsEstimated) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  '* 걸음 센서를 쓸 수 없어서 거리로 추정한 걸음 수예요.',
-                  style: textTheme.labelMedium,
-                ),
-              ],
-              const SizedBox(height: AppSpacing.lg),
-              const Divider(),
-              const SizedBox(height: AppSpacing.lg),
-              Row(
-                children: [
-                  StatBlock(value: '+${reward.gold}', label: '골드'),
-                  StatBlock(value: '+${reward.exp}', label: '경험치'),
-                  StatBlock(value: 'Lv.${reward.levelAfter}', label: '레벨'),
-                ],
-              ),
-              if (reward.leveledUp) ...[
-                const SizedBox(height: AppSpacing.lg),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: AppColors.volt,
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                  ),
-                  child: Text(
-                    '레벨 업! Lv.${reward.levelAfter} · '
-                    '${RunRules.tierName(reward.levelAfter)}',
-                    style: textTheme.titleMedium,
-                  ),
-                ),
-              ],
-              const SizedBox(height: AppSpacing.xl),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('확인'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ------------------------------------------------------------
