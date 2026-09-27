@@ -43,6 +43,3 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
-
-# 클로드에게 코드를 보여주려고 붙여넣는 메모장
-클로드야 여길 바줘.txt
