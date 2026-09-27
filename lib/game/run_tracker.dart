@@ -47,12 +47,16 @@ class RunTracker {
   DateTime? _lastTime;
 
   // 걸음 센서는 "폰을 켠 뒤 누적 걸음 수"를 주기 때문에, 구간 시작 값을 빼서 계산합니다.
+  // 너무 멀어서 버린 점프 횟수. 화면 아래 진단 줄에 보여줍니다.
+  int _rejectedJumps = 0;
+
   bool _hasStepSensor = false;
   int? _latestSensorSteps;
   int? _segmentStartSteps; // 시작/재개한 순간의 센서 값
   int _stepsBeforeSegment = 0; // 일시정지 전까지 모은 걸음 수
 
   RunState get state => _state;
+  int get rejectedJumps => _rejectedJumps;
 
   // 지도에 그릴 때 씁니다. 토막마다 선을 따로 그으면 끊긴 구간이 이어지지 않습니다.
   List<List<LatLng>> get segments => _segments;
@@ -90,6 +94,7 @@ class RunTracker {
     _segments = [
       [startPoint],
     ];
+    _rejectedJumps = 0;
     _lastPoint = startPoint;
     _lastTime = now;
     _stepsBeforeSegment = 0;
@@ -147,6 +152,7 @@ class RunTracker {
 
     // 너무 멀리 건너뛴 점은 지나온 길로 치지 않습니다. (maxJumpMeters 설명 참고)
     if (meters > maxJumpMeters) {
+      _rejectedJumps += 1;
       _segments.add([point]);
       return;
     }

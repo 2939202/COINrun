@@ -61,6 +61,12 @@ class _RunScreenState extends State<RunScreen> {
   Timer? _uiTimer; // 1초마다 화면을 다시 그리기만 하는 타이머
   bool _isSaving = false;
 
+  // 진단용 - 왜 경로가 안 그려지는지 화면에서 바로 보려고 셉니다. (개발 빌드에만 보임)
+  int _fixCount = 0; // 위치를 받은 횟수
+  DateTime? _lastFixAt; // 마지막으로 받은 시각
+  double? _lastAccuracy; // 마지막 위치의 오차(m)
+  int _droppedByAccuracy = 0; // 오차가 커서 버린 횟수
+
   // 개발용 시뮬레이터
   bool _useSimulator = false;
   Timer? _simulatorTimer;
@@ -71,8 +77,9 @@ class _RunScreenState extends State<RunScreen> {
   @override
   void initState() {
     super.initState();
-    // 시작 전에도 지도에 내 위치가 보이도록 바로 GPS를 켭니다.
-    _startGps();
+    // 시작 전에는 스트림을 열지 않고 위치만 한 번 받아옵니다.
+    // (스트림을 미리 열어두면 시작할 때 포그라운드 설정이 먹지 않습니다. _startGps 설명 참고)
+    _showCurrentPositionOnce();
     _startStepSensor();
     // 러닝 중 알림을 보여주기 위한 권한 (안드로이드 13 이상).
     // 거부해도 기록은 정상으로 됩니다. 알림만 안 보입니다.
@@ -91,10 +98,35 @@ class _RunScreenState extends State<RunScreen> {
   // ----------------------------------------------------------
   // 위치 수신
   // ----------------------------------------------------------
-  // keepAlive: 러닝 중에는 켭니다. 알림창에 "달리는 중" 알림을 띄우는 포그라운드 서비스가
-  // 함께 돌아서, 화면을 끄거나 다른 앱으로 넘어가도 위치가 계속 들어옵니다.
-  // 이게 없으면 안드로이드가 위치 전달을 끊어서 경로와 움직인 시간이 비게 됩니다.
-  Future<void> _startGps({bool keepAlive = false}) async {
+  // 시작 전에 지도에 내 위치만 찍어둡니다. 스트림은 열지 않습니다.
+  Future<void> _showCurrentPositionOnce() async {
+    final String? error = await LocationService.ensurePermission();
+    if (error != null) {
+      _showMessage(error);
+      return;
+    }
+    // 러닝 중 알림을 보여주기 위한 권한 (안드로이드 13 이상).
+    // 거부해도 기록은 정상으로 됩니다. 알림만 안 보입니다.
+    await LocationService.requestNotificationPermission();
+
+    final position = await LocationService.currentPosition();
+    if (!mounted || position == null || _useSimulator) return;
+    if (_tracker.state != RunState.idle) return; // 그 사이 러닝이 시작됐으면 건드리지 않습니다.
+
+    setState(
+      () => _currentPosition = LatLng(position.latitude, position.longitude),
+    );
+    _moveMap(_position);
+  }
+
+  // 위치 스트림을 엽니다. 러닝을 시작할 때 딱 한 번 부릅니다.
+  //
+  // 포그라운드 서비스가 함께 돌아서, 화면을 끄거나 다른 앱으로 넘어가도 위치가
+  // 계속 들어옵니다. 이게 없으면 안드로이드가 전달을 끊어서 경로와 움직인 시간이 빕니다.
+  //
+  // 여기서 스트림을 두 번 열면 안 됩니다. geolocator는 이미 열린 스트림이 있으면
+  // 새 설정을 무시하고 그걸 그대로 돌려주기 때문입니다(geolocator_android.dart:167).
+  Future<void> _startGps() async {
     final String? error = await LocationService.ensurePermission();
     if (error != null) {
       _showMessage(error);
@@ -104,10 +136,17 @@ class _RunScreenState extends State<RunScreen> {
 
     await _positionSubscription?.cancel();
     _positionSubscription =
-        LocationService.positionStream(keepAliveInBackground: keepAlive).listen(
+        LocationService.positionStream(keepAliveInBackground: true).listen(
           (position) {
+            _fixCount += 1;
+            _lastFixAt = DateTime.now();
+            _lastAccuracy = position.accuracy;
+
             // 오차가 큰 위치는 버립니다 (GPS 흔들림 때문에 거리가 쌓이는 것 방지)
-            if (position.accuracy > LocationService.maxAccuracyMeters) return;
+            if (position.accuracy > LocationService.maxAccuracyMeters) {
+              _droppedByAccuracy += 1;
+              return;
+            }
             _onNewPosition(LatLng(position.latitude, position.longitude));
           },
           onError: (Object error) {
@@ -124,10 +163,21 @@ class _RunScreenState extends State<RunScreen> {
       _currentPosition = newPosition;
       _tracker.addPosition(newPosition, DateTime.now());
     });
-    // 내 위치를 화면 가운데에 둡니다. 배율은 지금 화면에 맞춰진 값을 그대로 씁니다.
-    // (예전에는 여기서 _initialZoom을 넘겨서, 손으로 확대해도 다음 위치가
-    //  들어오는 순간 원래 배율로 되돌아갔습니다)
-    _mapController.move(newPosition, _currentZoom);
+    _moveMap(newPosition);
+  }
+
+  // 내 위치를 화면 가운데에 둡니다. 배율은 지금 화면에 맞춰진 값을 그대로 씁니다.
+  // (예전에는 _initialZoom을 넘겨서, 손으로 확대해도 다음 위치가 들어오는 순간
+  //  원래 배율로 되돌아갔습니다)
+  //
+  // 지도 조작이 실패해도 기록은 계속돼야 합니다. 화면을 끈 동안에는 지도가 그려지지
+  // 않는데, 그때 오류가 나서 거리와 경로까지 멈추면 안 됩니다.
+  void _moveMap(LatLng position) {
+    try {
+      _mapController.move(position, _currentZoom);
+    } catch (error) {
+      debugPrint('지도 이동 실패 (기록은 계속됩니다): $error');
+    }
   }
 
   double get _currentZoom =>
@@ -156,10 +206,15 @@ class _RunScreenState extends State<RunScreen> {
   // 러닝 세션 (시작 / 일시정지 / 재개 / 완료)
   // ----------------------------------------------------------
   void _start() {
-    setState(() => _tracker.start(_position, DateTime.now()));
+    setState(() {
+      _fixCount = 0;
+      _droppedByAccuracy = 0;
+      _lastFixAt = null;
+      _tracker.start(_position, DateTime.now());
+    });
     _startUiTimer();
-    // 러닝이 시작됐으니 위치 수신을 백그라운드에서도 살아 있는 방식으로 바꿉니다.
-    _startGps(keepAlive: true);
+    // 위치 스트림은 여기서 한 번만 엽니다.
+    _startGps();
   }
 
   void _pause() {
@@ -190,8 +245,10 @@ class _RunScreenState extends State<RunScreen> {
         _isSaving = false;
         _tracker.reset();
       });
-      // 러닝이 끝났으니 "달리는 중" 알림을 내립니다.
-      _startGps();
+      // 러닝이 끝났으니 위치 스트림을 닫습니다. "달리는 중" 알림도 같이 내려갑니다.
+      await _positionSubscription?.cancel();
+      _positionSubscription = null;
+      if (!mounted) return;
       showRunReport(context, record, reward);
     } catch (e) {
       // 저장에 실패하면 기록을 그대로 두고 일시정지 상태로 두어 다시 시도할 수 있게 합니다.
@@ -251,7 +308,12 @@ class _RunScreenState extends State<RunScreen> {
     } else {
       _stopSimulatorMove();
       setState(() => _useSimulator = false);
-      _startGps();
+      // 러닝 중일 때만 스트림을 엽니다. 시작 전이면 위치만 한 번 받아옵니다.
+      if (_tracker.state == RunState.idle) {
+        _showCurrentPositionOnce();
+      } else {
+        _startGps();
+      }
       _startStepSensor();
     }
   }
@@ -413,6 +475,18 @@ class _RunScreenState extends State<RunScreen> {
           ),
           const SizedBox(height: AppSpacing.lg),
           _RewardPreview(userId: widget.userId, record: record),
+          if (kDebugMode) ...[
+            const SizedBox(height: AppSpacing.sm),
+            _GpsDiagnostics(
+              fixCount: _fixCount,
+              lastFixAt: _lastFixAt,
+              lastAccuracy: _lastAccuracy,
+              droppedByAccuracy: _droppedByAccuracy,
+              rejectedJumps: _tracker.rejectedJumps,
+              pointsDrawn: record.path.length,
+              isStreaming: _positionSubscription != null,
+            ),
+          ],
           const Spacer(),
           _buildControls(),
         ],
@@ -537,6 +611,54 @@ class _RewardPreviewState extends State<_RewardPreview> {
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+// 개발 빌드에만 보이는 GPS 진단 줄
+//
+// "경로가 안 그려진다"를 숫자로 바꿔서 보여줍니다. 어디서 막혔는지 바로 알 수 있습니다.
+//   수신 0        -> 위치가 아예 안 들어옴 (권한/서비스 문제)
+//   수신은 느는데 점이 안 늘면 -> 오차나 점프 때문에 버려지는 중
+//   화면을 끄고 돌아왔을 때 "마지막 수신"이 몇 분 전이면 -> 백그라운드에서 끊긴 것
+class _GpsDiagnostics extends StatelessWidget {
+  final int fixCount;
+  final DateTime? lastFixAt;
+  final double? lastAccuracy;
+  final int droppedByAccuracy;
+  final int rejectedJumps;
+  final int pointsDrawn;
+  final bool isStreaming;
+
+  const _GpsDiagnostics({
+    required this.fixCount,
+    required this.lastFixAt,
+    required this.lastAccuracy,
+    required this.droppedByAccuracy,
+    required this.rejectedJumps,
+    required this.pointsDrawn,
+    required this.isStreaming,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final DateTime? last = lastFixAt;
+    final String since = last == null
+        ? '아직 없음'
+        : '${DateTime.now().difference(last).inSeconds}초 전';
+    final String accuracy = lastAccuracy == null
+        ? '-'
+        : '${lastAccuracy!.toStringAsFixed(0)}m';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      color: AppColors.grey100,
+      child: Text(
+        '스트림 ${isStreaming ? '켜짐' : '꺼짐'} · 수신 $fixCount회 · 마지막 $since · 오차 $accuracy\n'
+        '경로에 찍힌 점 $pointsDrawn개 · 오차로 버림 $droppedByAccuracy · 멀어서 버림 $rejectedJumps',
+        style: Theme.of(context).textTheme.labelMedium,
       ),
     );
   }

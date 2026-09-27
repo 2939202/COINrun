@@ -38,6 +38,27 @@ class LocationService {
     await Permission.notification.request();
   }
 
+  // 지금 위치 한 번만. (러닝 시작 전에 지도에 내 위치를 찍어두는 용도)
+  //
+  // 시작 전에 스트림을 열지 않는 이유가 있습니다. geolocator는 이미 열린 스트림이 있으면
+  // 새로 요청해도 그걸 그대로 돌려주고 새 설정을 무시합니다(geolocator_android.dart:167).
+  // 그래서 시작 전에 스트림을 열어두면, 러닝을 시작할 때 포그라운드 설정을 넣어 다시
+  // 열어도 먹지 않을 수 있습니다. 스트림은 러닝을 시작할 때 딱 한 번만 엽니다.
+  static Future<Position?> currentPosition() async {
+    try {
+      // 마지막으로 알던 위치가 있으면 기다리지 않고 바로 씁니다.
+      final Position? last = await Geolocator.getLastKnownPosition();
+      if (last != null) return last;
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 15),
+      );
+    } catch (_) {
+      // 실내처럼 신호를 못 잡는 곳이면 그냥 못 받은 채로 둡니다. 지도는 기본 위치를 보여줍니다.
+      return null;
+    }
+  }
+
   // 5m 이상 움직일 때마다 새 위치를 알려주는 스트림
   //
   // keepAliveInBackground를 켜면 알림창에 "달리는 중" 알림을 띄우는
