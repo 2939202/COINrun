@@ -16,7 +16,19 @@ class StepService {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
-  // 걸음 센서를 쓸 수 있으면 true
+  // 권한이 이미 있는지만 확인합니다. (요청하지 않음)
+  //
+  // 요청은 services/app_permissions.dart가 순서대로 처리합니다.
+  // 여기저기서 따로 요청하면 권한 창이 겹쳐서 하나가 씹힙니다.
+  static Future<bool> hasPermission() async {
+    if (!isSupported) return false;
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return Permission.activityRecognition.isGranted;
+    }
+    return true;
+  }
+
+  // 걸음 센서 권한을 요청합니다. AppPermissions에서만 부릅니다.
   static Future<bool> ensurePermission() async {
     if (!isSupported) return false;
     if (defaultTargetPlatform == TargetPlatform.android) {

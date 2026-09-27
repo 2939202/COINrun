@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 // ============================================================
 // GPS 권한 요청과 위치 수신
@@ -29,13 +28,6 @@ class LocationService {
       return '위치 권한이 영구적으로 거부되었습니다. 앱 설정에서 권한을 허용해주세요.';
     }
     return null;
-  }
-
-  // 안드로이드 13부터 알림을 보여주려면 따로 받아야 합니다.
-  // 거부해도 위치는 계속 받습니다. 알림만 안 보입니다.
-  static Future<void> requestNotificationPermission() async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
-    await Permission.notification.request();
   }
 
   // 마지막으로 알고 있던 위치. 기다리지 않고 바로 돌아옵니다.

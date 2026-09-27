@@ -13,6 +13,7 @@ import '../game/run_tracker.dart';
 import '../models/equipment_set.dart';
 import '../models/run_record.dart';
 import '../models/user_model.dart';
+import '../services/app_permissions.dart';
 import '../services/location_service.dart';
 import '../services/step_service.dart';
 import '../services/user_repository.dart';
@@ -85,14 +86,7 @@ class _RunScreenState extends State<RunScreen> {
     // 시작을 누를 때 다시 여는 방식은 쓰지 않습니다. geolocator는 이미 열린 스트림이
     // 있으면 새 설정을 무시하고 그걸 돌려주기 때문에(geolocator_android.dart:167),
     // 두 번 여는 순간 설정이 먹었는지 안 먹었는지 알 수 없게 됩니다.
-    // 스트림이 첫 위치를 줄 때까지 기다리지 않도록, 폰이 이미 알고 있는 위치를
-    // 먼저 지도에 찍어둡니다. (스트림은 5m를 움직여야 첫 값을 줍니다)
-    _showLastKnownPosition();
-    _startGps();
-    _startStepSensor();
-    // 러닝 중 알림을 보여주기 위한 권한 (안드로이드 13 이상).
-    // 거부해도 기록은 정상으로 됩니다. 알림만 안 보입니다.
-    LocationService.requestNotificationPermission();
+    _prepare();
   }
 
   @override
@@ -108,6 +102,30 @@ class _RunScreenState extends State<RunScreen> {
   // ----------------------------------------------------------
   // 위치 수신
   // ----------------------------------------------------------
+  // 권한부터 확보하고 GPS와 걸음 센서를 켭니다.
+  //
+  // 순서를 지키는 것이 중요합니다. 예전에는 GPS와 걸음 센서를 동시에 켜면서 각자
+  // 권한을 요청했는데, 안드로이드는 권한 창을 하나만 띄울 수 있어서 뒤엣것이 씹혔습니다.
+  // 허용을 눌러도 안 먹거나 엉뚱한 때 다시 뜨던 것이 이것 때문이었습니다.
+  //
+  // 보통은 로그인 직후 권한 화면에서 이미 받아둔 상태라 여기서는 그냥 통과합니다.
+  // "나중에 하기"를 고른 경우를 위해 여기서도 한 번 확인합니다.
+  Future<void> _prepare() async {
+    final status = await AppPermissions.check();
+    if (!status.canRecord) await AppPermissions.request();
+    if (!mounted) return;
+
+    // 스트림이 첫 위치를 줄 때까지 기다리지 않도록, 폰이 이미 알고 있는 위치를
+    // 먼저 지도에 찍어둡니다.
+    await _showLastKnownPosition();
+    if (!mounted) return;
+
+    await _startGps();
+    if (!mounted) return;
+
+    await _startStepSensor();
+  }
+
   // 폰이 마지막으로 알던 위치를 지도에 찍어둡니다. 기다리지 않고 바로 끝납니다.
   Future<void> _showLastKnownPosition() async {
     final position = await LocationService.lastKnownPosition();
@@ -131,7 +149,6 @@ class _RunScreenState extends State<RunScreen> {
       _showMessage(error);
       return;
     }
-    await LocationService.requestNotificationPermission();
     if (!mounted || _useSimulator) return;
 
     await _positionSubscription?.cancel();
@@ -214,7 +231,8 @@ class _RunScreenState extends State<RunScreen> {
   // 걸음 센서
   // ----------------------------------------------------------
   Future<void> _startStepSensor() async {
-    final bool granted = await StepService.ensurePermission();
+    // 권한은 _prepare에서 이미 순서대로 받았습니다. 여기서는 확인만 합니다.
+    final bool granted = await StepService.hasPermission();
     if (!mounted) return;
     if (!granted) {
       // 센서를 못 쓰면 RunTracker가 거리로 걸음 수를 추정합니다.

@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../services/user_repository.dart';
+import '../services/app_permissions.dart';
 import 'login_screen.dart';
 import 'main_screen.dart';
+import 'permission_screen.dart';
 
 // ============================================================
 // 로그인 상태에 따라 보여줄 화면을 고르는 문지기
@@ -80,7 +82,52 @@ class _UserDocGateState extends State<_UserDocGate> {
             onRetry: () => setState(() => _ready = _prepare()),
           );
         }
-        return MainScreen(userId: widget.account.uid);
+        // 홈으로 보내기 전에 권한을 한 번 받습니다.
+        return _PermissionGate(userId: widget.account.uid);
+      },
+    );
+  }
+}
+
+// 권한이 갖춰졌는지 보고, 모자라면 안내 화면을 한 번 보여줍니다.
+//
+// 러닝 화면에서 물어보지 않고 여기서 받는 이유: 러닝 화면은 들어가자마자 GPS와
+// 걸음 센서를 함께 켜는데, 그 자리에서 두 권한을 동시에 요청하면 하나가 씹힙니다.
+class _PermissionGate extends StatefulWidget {
+  final String userId;
+
+  const _PermissionGate({required this.userId});
+
+  @override
+  State<_PermissionGate> createState() => _PermissionGateState();
+}
+
+class _PermissionGateState extends State<_PermissionGate> {
+  late Future<AppPermissionStatus> _status = AppPermissions.check();
+
+  // 사용자가 "나중에 하기"를 골랐으면 이번 실행 동안은 다시 묻지 않습니다.
+  bool _skipped = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<AppPermissionStatus>(
+      future: _status,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const _Loading();
+        }
+
+        final AppPermissionStatus? status = snapshot.data;
+        // 권한 상태를 못 읽었으면 막지 않고 들여보냅니다.
+        final bool ready = _skipped || status == null || status.allGranted;
+        if (ready) return MainScreen(userId: widget.userId);
+
+        return PermissionScreen(
+          onDone: () => setState(() {
+            _skipped = true;
+            _status = AppPermissions.check();
+          }),
+        );
       },
     );
   }
