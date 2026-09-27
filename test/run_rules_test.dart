@@ -107,6 +107,28 @@ void main() {
       expect(tracker.record.stepsEstimated, isFalse);
     });
 
+    // 조이스틱 모드에서 골드가 거리만 보고 오르는지 확인합니다.
+    // run_screen이 하는 일과 같은 순서: 센서값 한 번 수신 -> 시작 -> 조이스틱 켜기 -> 5m씩 이동
+    test('조이스틱 모드에서는 골드가 거리로 오른다 (7.5m당 1골드)', () {
+      const double metersPerDegreeLat = 111320;
+      LatLng at(int taps) =>
+          LatLng(37.5665 + taps * 5 / metersPerDegreeLat, 126.9780);
+
+      final tracker = RunTracker()
+        ..addSensorSteps(12345) // 화면을 열자마자 센서가 뱉는 누적값
+        ..start(at(0), t0);
+      tracker.disableStepSensor(); // 조이스틱 켜기
+
+      for (int taps = 1; taps <= 20; taps++) {
+        tracker.addPosition(at(taps), t0.add(Duration(milliseconds: 150 * taps)));
+      }
+
+      final record = tracker.record;
+      expect(record.distanceMeters, closeTo(100, 1)); // 5m x 20번
+      expect(record.steps, 133); // 100m / 0.75m
+      expect(RunRules.goldFor(record), 13); // 133걸음 / 10
+    });
+
     test('센서를 끄면 다시 거리로 걸음 수를 추정한다 (시뮬레이터용)', () {
       final tracker = RunTracker()
         ..addSensorSteps(12345)
