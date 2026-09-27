@@ -41,8 +41,9 @@ class UserRepository {
   }
 
   // 최근 러닝 기록 (최신순)
-  // limit을 주지 않으면 보관하는 개수만큼 전부 봅니다. (전체 기록 화면)
-  Stream<List<RunLog>> watchRecentRuns(String userId, {int limit = 5}) {
+  // 기본값은 홈의 "최근 러닝" 미리보기 개수입니다.
+  // 전체 기록 화면은 limit에 maxStoredRuns를 넣어서 보관 중인 것을 전부 봅니다.
+  Stream<List<RunLog>> watchRecentRuns(String userId, {int limit = 3}) {
     return _userDoc(userId)
         .collection('runs')
         .orderBy('createdAt', descending: true)

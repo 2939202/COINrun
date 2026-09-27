@@ -25,7 +25,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false, //못생긴 디버그 띠 제거해줍니다.
-      title: '달리랑 RPG', //앱의 제목을 설정합니다.
+      title: '달리랑 RPG', //앱의 제목을
       theme: AppTheme.light(), //theme/app_theme.dart에서 정한 디자인을 앱 전체에 적용합니다.
       home: const AuthGate(), //로그인 안 했으면 로그인 화면, 했으면 홈 화면
     );
