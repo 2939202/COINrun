@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../models/run_log.dart';
@@ -31,6 +32,20 @@ class RunDetailScreen extends StatelessWidget {
         children: [
           // 어디를 뛰었는지
           SizedBox(height: 300, child: RouteMap(segments: run.segments)),
+
+          // 개발 빌드에만 보입니다. 지도가 비어 있을 때, 저장된 점이 없는 것인지
+          // 점은 있는데 안 그려지는 것인지 구분하려고 둡니다.
+          if (kDebugMode)
+            Container(
+              width: double.infinity,
+              color: AppColors.grey100,
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              child: Text(
+                '저장된 점 ${run.path.length}개  ·  토막 ${run.segments.length}개  ·  '
+                '그릴 수 있는 토막 ${run.segments.where((s) => s.length >= 2).length}개',
+                style: textTheme.labelMedium,
+              ),
+            ),
 
           Padding(
             padding: const EdgeInsets.all(AppSpacing.lg),
