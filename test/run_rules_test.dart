@@ -20,6 +20,10 @@ RunRecord _record({
 // 위도 0.0001도 = 약 11m (북쪽으로 이동)
 LatLng _north(int step) => LatLng(37.5665 + step * 0.0001, 126.9780);
 
+// 북쪽으로 정확히 몇 m (흔들림처럼 작은 거리를 다룰 때)
+LatLng _northMeters(double meters) =>
+    LatLng(37.5665 + meters / 111320, 126.9780);
+
 void main() {
   group('RunRules', () {
     test('움직인 시간 1분당 10 EXP', () {
@@ -109,6 +113,37 @@ void main() {
 
     // 조이스틱 모드에서 골드가 거리만 보고 오르는지 확인합니다.
     // run_screen이 하는 일과 같은 순서: 센서값 한 번 수신 -> 시작 -> 조이스틱 켜기 -> 5m씩 이동
+    // 2초마다 위치가 들어오므로, 가만히 있을 때 흔들림이 거리로 쌓이면 안 됩니다.
+    test('제자리 흔들림은 거리에 쌓이지 않는다', () {
+      final tracker = RunTracker()..start(_north(0), t0);
+      // 1~2m 안에서 30번 흔들림 (2초 간격 = 1분)
+      for (int i = 1; i <= 30; i++) {
+        tracker.addPosition(
+          _northMeters(i.isEven ? 1.5 : -1.5),
+          t0.add(Duration(seconds: i * 2)),
+        );
+      }
+      expect(tracker.record.distanceMeters, 0);
+      expect(tracker.record.movingTime, Duration.zero);
+      expect(tracker.segments.first.length, 1); // 점이 안 늘어남
+    });
+
+    // 흔들림을 거를 때 기준점까지 옮겨버리면, 천천히 걷는 사람은 매번 기준 미만이라
+    // 영영 거리가 쌓이지 않습니다. 기준점을 그대로 둬야 넘는 순간 잡힙니다.
+    test('천천히 걸어도 기준을 넘는 순간 거리가 쌓인다', () {
+      final tracker = RunTracker()..start(_north(0), t0);
+      // 2초마다 1.2m씩 앞으로 (시속 2.2km, 아주 느린 걸음)
+      for (int i = 1; i <= 10; i++) {
+        tracker.addPosition(
+          _northMeters(i * 1.2),
+          t0.add(Duration(seconds: i * 2)),
+        );
+      }
+      // 12m를 갔으니 그만큼 쌓여야 합니다. (3m 단위로 끊겨서 잡힘)
+      expect(tracker.record.distanceMeters, greaterThan(8));
+      expect(tracker.record.distanceMeters, lessThanOrEqualTo(12.1));
+    });
+
     // GPS를 못 잡은 채로 시작을 누르면 예전에는 기본 좌표(서울 시청)가 출발점이 됐습니다.
     // 그러면 첫 위치가 들어올 때 거기까지가 한 번에 뛴 것으로 계산돼 통째로 버려졌습니다.
     test('GPS를 못 잡은 채로 시작하면 첫 위치가 출발점이 된다', () {

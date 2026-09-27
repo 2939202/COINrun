@@ -38,23 +38,19 @@ class LocationService {
     await Permission.notification.request();
   }
 
-  // 지금 위치 한 번만. (러닝 시작 전에 지도에 내 위치를 찍어두는 용도)
+  // 마지막으로 알고 있던 위치. 기다리지 않고 바로 돌아옵니다.
   //
-  // 시작 전에 스트림을 열지 않는 이유가 있습니다. geolocator는 이미 열린 스트림이 있으면
-  // 새로 요청해도 그걸 그대로 돌려주고 새 설정을 무시합니다(geolocator_android.dart:167).
-  // 그래서 시작 전에 스트림을 열어두면, 러닝을 시작할 때 포그라운드 설정을 넣어 다시
-  // 열어도 먹지 않을 수 있습니다. 스트림은 러닝을 시작할 때 딱 한 번만 엽니다.
-  static Future<Position?> currentPosition() async {
+  // 러닝 화면에 들어오자마자 지도에 내 위치를 찍어두는 용도입니다.
+  // 스트림만으로는 5m를 움직이기 전까지 아무것도 안 들어와서, 화면을 열어도
+  // 내 위치를 모르는 상태가 계속됩니다.
+  //
+  // getCurrentPosition이 아니라 getLastKnownPosition을 쓰는 이유:
+  // 전자는 새 측위를 요청해서 최대 몇 초 걸리고 스트림과 같은 자원을 잡습니다.
+  // 후자는 폰이 이미 들고 있는 값을 그대로 돌려줘서 즉시 끝나고 부딪히지 않습니다.
+  static Future<Position?> lastKnownPosition() async {
     try {
-      // 마지막으로 알던 위치가 있으면 기다리지 않고 바로 씁니다.
-      final Position? last = await Geolocator.getLastKnownPosition();
-      if (last != null) return last;
-      return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 15),
-      );
+      return await Geolocator.getLastKnownPosition();
     } catch (_) {
-      // 실내처럼 신호를 못 잡는 곳이면 그냥 못 받은 채로 둡니다. 지도는 기본 위치를 보여줍니다.
       return null;
     }
   }
@@ -74,13 +70,17 @@ class LocationService {
   }
 
   static LocationSettings _settings(bool keepAliveInBackground) {
-    const double accuracyFilterMeters = 5;
-
     // 포그라운드 서비스는 안드로이드에만 있는 개념입니다.
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       return AndroidSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: accuracyFilterMeters.toInt(),
+        // distanceFilter를 0으로 둬서 움직이지 않아도 2초마다 위치를 받습니다.
+        //
+        // 5m로 두면 가만히 있을 때 아무것도 안 들어오는데, 그 모습이 "스트림이 죽은 것"과
+        // 화면에서 똑같이 보입니다. 실제로 이것 때문에 고장인 줄 알고 한참 헤맸습니다.
+        // 제자리 흔들림으로 거리가 부풀지 않게 거르는 일은 RunTracker가 합니다.
+        distanceFilter: 0,
+        intervalDuration: const Duration(seconds: 2),
         foregroundNotificationConfig: keepAliveInBackground
             ? const ForegroundNotificationConfig(
                 notificationTitle: '달리는 중',
@@ -96,10 +96,7 @@ class LocationService {
       );
     }
 
-    return const LocationSettings(
-      accuracy: LocationAccuracy.high,
-      distanceFilter: 5,
-    );
+    return const LocationSettings(accuracy: LocationAccuracy.high);
   }
 
   // 두 좌표 사이 거리(m)

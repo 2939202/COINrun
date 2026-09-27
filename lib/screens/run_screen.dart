@@ -85,6 +85,9 @@ class _RunScreenState extends State<RunScreen> {
     // 시작을 누를 때 다시 여는 방식은 쓰지 않습니다. geolocator는 이미 열린 스트림이
     // 있으면 새 설정을 무시하고 그걸 돌려주기 때문에(geolocator_android.dart:167),
     // 두 번 여는 순간 설정이 먹었는지 안 먹었는지 알 수 없게 됩니다.
+    // 스트림이 첫 위치를 줄 때까지 기다리지 않도록, 폰이 이미 알고 있는 위치를
+    // 먼저 지도에 찍어둡니다. (스트림은 5m를 움직여야 첫 값을 줍니다)
+    _showLastKnownPosition();
     _startGps();
     _startStepSensor();
     // 러닝 중 알림을 보여주기 위한 권한 (안드로이드 13 이상).
@@ -105,6 +108,18 @@ class _RunScreenState extends State<RunScreen> {
   // ----------------------------------------------------------
   // 위치 수신
   // ----------------------------------------------------------
+  // 폰이 마지막으로 알던 위치를 지도에 찍어둡니다. 기다리지 않고 바로 끝납니다.
+  Future<void> _showLastKnownPosition() async {
+    final position = await LocationService.lastKnownPosition();
+    if (!mounted || position == null) return;
+    if (_currentPosition != null || _useSimulator) return; // 이미 새 위치가 들어왔으면 그대로
+
+    setState(
+      () => _currentPosition = LatLng(position.latitude, position.longitude),
+    );
+    _moveMap(_position);
+  }
+
   // 위치 스트림을 엽니다. 이 화면에 들어올 때 한 번만 부릅니다.
   //
   // withForegroundService를 켜면 알림창에 알림이 하나 뜨고, 그게 떠 있는 동안

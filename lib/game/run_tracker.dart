@@ -18,6 +18,15 @@ class RunTracker {
   // 이 속도(m/s) 이상이면 움직이는 중으로 봅니다. 1.0m/s = 시속 3.6km (느린 걸음)
   static const double minMovingSpeed = 1.0;
 
+  // 이보다 적게 움직인 위치는 무시합니다.
+  //
+  // GPS는 가만히 있어도 몇 미터씩 흔들립니다. 2초마다 위치를 받으니 그대로 더하면
+  // 서 있기만 해도 거리가 계속 늘어납니다.
+  //
+  // 무시할 때 기준점을 옮기지 않는 것이 중요합니다. 기준점을 옮겨버리면 천천히 걷는 사람은
+  // 매번 3m 미만이라 영영 거리가 쌓이지 않습니다. 그대로 두면 3m를 넘는 순간 잡힙니다.
+  static const double minMoveMeters = 3;
+
   // 위치 사이 간격이 이보다 길면(신호 끊김 등) 그 시간은 움직인 시간에 넣지 않습니다.
   static const Duration maxGap = Duration(seconds: 10);
 
@@ -146,13 +155,19 @@ class RunTracker {
   void addPosition(LatLng point, DateTime time) {
     final LatLng? previous = _lastPoint;
     final DateTime? previousTime = _lastTime;
-    _lastPoint = point;
-    _lastTime = time;
 
-    if (_state != RunState.running) return;
+    // 달리는 중이 아니면 기준점만 따라 옮깁니다.
+    // (일시정지 중에 이동한 것이 재개할 때 한꺼번에 더해지지 않도록)
+    if (_state != RunState.running) {
+      _lastPoint = point;
+      _lastTime = time;
+      return;
+    }
 
     // GPS를 못 잡은 채로 시작했으면, 첫 위치가 들어오는 여기가 출발점입니다.
     if (previous == null) {
+      _lastPoint = point;
+      _lastTime = time;
       _segments.add([point]);
       return;
     }
@@ -163,6 +178,12 @@ class RunTracker {
       point.latitude,
       point.longitude,
     );
+
+    // 제자리 흔들림은 버립니다. 기준점은 그대로 둡니다. (minMoveMeters 설명 참고)
+    if (meters < minMoveMeters) return;
+
+    _lastPoint = point;
+    _lastTime = time;
 
     // 너무 멀리 건너뛴 점은 지나온 길로 치지 않습니다. (maxJumpMeters 설명 참고)
     if (meters > maxJumpMeters) {
