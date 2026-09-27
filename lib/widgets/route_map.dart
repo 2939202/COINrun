@@ -15,23 +15,34 @@ import '../theme/app_theme.dart';
 // 완료 리포트와 기록 상세 화면에서 같이 씁니다.
 // ============================================================
 class RouteMap extends StatelessWidget {
-  final List<LatLng> path;
+  // 경로 토막들. 신호가 오래 끊긴 구간은 토막이 나뉘어서, 실제로 지나지 않은 길을
+  // 선으로 잇지 않습니다.
+  final List<List<LatLng>> segments;
 
   // 경로 둘레에 남길 여백. 선이 화면 끝에 붙지 않게 합니다.
   final double padding;
 
-  const RouteMap({super.key, required this.path, this.padding = 28});
+  const RouteMap({super.key, required this.segments, this.padding = 28});
+
+  // 지도 범위를 잡을 때는 토막을 신경 쓰지 않고 점만 씁니다.
+  List<LatLng> get _points => [for (final segment in segments) ...segment];
 
   @override
   Widget build(BuildContext context) {
-    // 점이 하나뿐이면 선이 그려지지 않습니다. 경로를 저장하기 전에 뛴 기록도 여기로 옵니다.
-    if (path.length < 2) return const _NoRoute();
+    // 선을 그릴 만한 토막이 하나도 없으면 (경로를 저장하기 전에 뛴 기록 포함)
+    final List<List<LatLng>> drawable = [
+      for (final segment in segments)
+        if (segment.length >= 2) segment,
+    ];
+    if (drawable.isEmpty) return const _NoRoute();
+
+    final List<LatLng> points = _points;
 
     return FlutterMap(
       options: MapOptions(
         // 뛴 영역 전체가 화면에 들어오도록 확대/위치를 자동으로 맞춥니다.
         initialCameraFit: CameraFit.bounds(
-          bounds: LatLngBounds.fromPoints(path),
+          bounds: LatLngBounds.fromPoints(points),
           padding: EdgeInsets.all(padding),
         ),
         interactionOptions: const InteractionOptions(
@@ -45,19 +56,20 @@ class RouteMap extends StatelessWidget {
         ),
         PolylineLayer(
           polylines: [
-            Polyline(points: path, strokeWidth: 5, color: AppColors.black),
+            for (final segment in drawable)
+              Polyline(points: segment, strokeWidth: 5, color: AppColors.black),
           ],
         ),
         MarkerLayer(
           markers: [
             Marker(
-              point: path.first,
+              point: points.first,
               width: 18,
               height: 18,
               child: const _EndDot(color: AppColors.white, label: '출발'),
             ),
             Marker(
-              point: path.last,
+              point: points.last,
               width: 18,
               height: 18,
               child: const _EndDot(color: AppColors.volt, label: '도착'),

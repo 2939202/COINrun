@@ -21,6 +21,17 @@ class RunTracker {
   // 위치 사이 간격이 이보다 길면(신호 끊김 등) 그 시간은 움직인 시간에 넣지 않습니다.
   static const Duration maxGap = Duration(seconds: 10);
 
+  // 한 번에 이보다 멀리 뛴 위치는 거리에 더하지 않습니다.
+  //
+  // 지하도나 건물 사이에서 신호가 잠깐 끊겼다 돌아오면, 그동안 지나온 길을 건너뛰고
+  // 뚝 떨어진 점 하나가 들어옵니다. 그대로 더하면 "직선으로 갔다"고 치게 되는데
+  // 실제로 지나온 길이 아닙니다. 한 바퀴 돌아 제자리로 왔으면 0m가 되고,
+  // 곧장 갔으면 한꺼번에 더해져서 어느 쪽이든 틀립니다.
+  //
+  // 200m는 달리는 속도로 40초쯤입니다. 그보다 짧게 끊긴 건 직선으로 봐도 큰 차이가 없어서
+  // 그대로 더합니다. 그보다 길게 끊겼으면 믿지 않고 경로를 끊습니다.
+  static const double maxJumpMeters = 200;
+
   // 걸음 센서가 없을 때 쓰는 평균 보폭 (m)
   static const double estimatedStrideMeters = 0.75;
 
@@ -29,7 +40,9 @@ class RunTracker {
 
   double _distance = 0;
   Duration _movingTime = Duration.zero;
-  List<LatLng> _path = [];
+  // 경로는 토막 여럿으로 들고 있습니다. 신호가 오래 끊기거나 일시정지했다 다시 시작하면
+  // 그 사이는 어디로 갔는지 모르므로, 이어 그리지 않고 새 토막을 시작합니다.
+  List<List<LatLng>> _segments = [];
   LatLng? _lastPoint;
   DateTime? _lastTime;
 
@@ -40,7 +53,12 @@ class RunTracker {
   int _stepsBeforeSegment = 0; // 일시정지 전까지 모은 걸음 수
 
   RunState get state => _state;
-  List<LatLng> get path => _path;
+
+  // 지도에 그릴 때 씁니다. 토막마다 선을 따로 그으면 끊긴 구간이 이어지지 않습니다.
+  List<List<LatLng>> get segments => _segments;
+
+  // 저장하거나 지도 범위를 잡을 때처럼 점만 필요할 때 씁니다.
+  List<LatLng> get path => [for (final segment in _segments) ...segment];
 
   int get steps {
     if (!_hasStepSensor) return (_distance / estimatedStrideMeters).floor();
@@ -60,14 +78,18 @@ class RunTracker {
     distanceMeters: _distance,
     steps: steps,
     stepsEstimated: !_hasStepSensor,
-    path: List.unmodifiable(_path),
+    segments: [
+      for (final segment in _segments) List<LatLng>.unmodifiable(segment),
+    ],
   );
 
   void start(LatLng startPoint, DateTime now) {
     _state = RunState.running;
     _distance = 0;
     _movingTime = Duration.zero;
-    _path = [startPoint];
+    _segments = [
+      [startPoint],
+    ];
     _lastPoint = startPoint;
     _lastTime = now;
     _stepsBeforeSegment = 0;
@@ -89,6 +111,9 @@ class RunTracker {
     _segmentStartSteps = _latestSensorSteps;
     // 일시정지 중에 이동한 거리/시간은 세지 않도록 기준점을 지금으로 옮깁니다.
     _lastTime = now;
+    // 멈춰 있는 동안 자리를 옮겼을 수 있습니다. 그 사이를 선으로 잇지 않도록 새 토막을 시작합니다.
+    final LatLng? here = _lastPoint;
+    if (here != null) _segments.add([here]);
     _stopwatch.start();
   }
 
@@ -100,7 +125,7 @@ class RunTracker {
       ..reset();
     _distance = 0;
     _movingTime = Duration.zero;
-    _path = [];
+    _segments = [];
     _stepsBeforeSegment = 0;
     _segmentStartSteps = null;
   }
@@ -119,8 +144,15 @@ class RunTracker {
       point.latitude,
       point.longitude,
     );
+
+    // 너무 멀리 건너뛴 점은 지나온 길로 치지 않습니다. (maxJumpMeters 설명 참고)
+    if (meters > maxJumpMeters) {
+      _segments.add([point]);
+      return;
+    }
+
     _distance += meters;
-    _path.add(point);
+    _segments.last.add(point);
 
     if (previousTime == null) return;
     final Duration gap = time.difference(previousTime);

@@ -101,7 +101,7 @@ class _RunReport extends StatelessWidget {
                         SizedBox(
                           height: 200,
                           width: double.infinity,
-                          child: RouteMap(path: record.path),
+                          child: RouteMap(segments: record.segments),
                         ),
                         Padding(
                           padding: const EdgeInsets.all(AppSpacing.lg),

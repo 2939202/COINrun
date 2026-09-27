@@ -25,6 +25,20 @@ class RouteSimplifier {
   // 아무리 복잡한 경로여도 이 개수를 넘지 않게 합니다.
   static const int defaultMaxPoints = 300;
 
+  // 토막마다 따로 걸러냅니다. 토막을 합쳐서 걸러내면 끊긴 구간이 이어져 버립니다.
+  // 점이 하나뿐인 토막(끊긴 직후)은 선을 그릴 수 없어서 버립니다.
+  static List<List<LatLng>> simplifySegments(
+    List<List<LatLng>> segments, {
+    double tolerance = defaultToleranceMeters,
+    int maxPoints = defaultMaxPoints,
+  }) {
+    return [
+      for (final segment in segments)
+        if (segment.length >= 2)
+          simplify(segment, tolerance: tolerance, maxPoints: maxPoints),
+    ];
+  }
+
   static List<LatLng> simplify(
     List<LatLng> points, {
     double tolerance = defaultToleranceMeters,

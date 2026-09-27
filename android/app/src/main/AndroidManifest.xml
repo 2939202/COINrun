@@ -5,8 +5,22 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <!-- 걸음 수 센서 (안드로이드 10 이상에서 필요) -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
+
+    <!--
+      러닝 중에 화면을 꺼도 위치를 계속 받기 위한 권한입니다.
+      안드로이드 8부터는 앱이 앞에 나와 있지 않으면 위치 전달이 끊깁니다.
+      알림창에 "달리는 중" 알림을 띄우는 포그라운드 서비스를 돌리면 계속 받을 수 있습니다.
+      (나이키, 스트라바가 러닝 중에 알림을 하나 띄워두는 게 이것 때문입니다)
+
+      ACCESS_BACKGROUND_LOCATION은 넣지 않습니다. 포그라운드 서비스를 쓰면 필요 없고,
+      그 권한은 사용자에게 "항상 허용"을 따로 받아야 해서 훨씬 번거롭습니다.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+    <!-- 안드로이드 13부터 알림을 보여주려면 필요합니다. 없어도 서비스는 돌아갑니다. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
-        android:label="contact"
+        android:label="달리랑 RPG"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">

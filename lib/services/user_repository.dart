@@ -122,9 +122,10 @@ class UserRepository {
         'steps': run.steps,
         'stepsEstimated': run.stepsEstimated, // 센서 없이 추정한 걸음인지 (부정행위 검사용)
         // 지나온 길. 점이 수천 개라 그대로 담으면 문서가 너무 커져서 솎아내고 저장합니다.
-        'path': RouteSimplifier.simplify(
-          run.path,
-        ).map((point) => GeoPoint(point.latitude, point.longitude)).toList(),
+        //
+        // Firestore는 배열 안에 배열을 담지 못합니다. 그래서 모든 점을 한 줄로 이어 붙이고,
+        // 새 토막이 시작되는 자리만 pathBreaks에 따로 적어둡니다.
+        ...RunLog.pathFields(RouteSimplifier.simplifySegments(run.segments)),
         'goldEarned': gold,
         'expEarned': exp,
         'gearSetId': gear?.id, // 어떤 장비를 입고 뛰었는지 (나중에 기록 화면에서 사용)

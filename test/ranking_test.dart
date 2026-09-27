@@ -88,11 +88,7 @@ void main() {
     });
 
     test('저장된 totalExp가 있으면 그 값을 쓴다', () {
-      final user = UserModel.fromMap({
-        'level': 3,
-        'exp': 150,
-        'totalExp': 999,
-      });
+      final user = UserModel.fromMap({'level': 3, 'exp': 150, 'totalExp': 999});
       expect(user.totalExp, 999);
     });
 

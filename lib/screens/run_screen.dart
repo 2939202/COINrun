@@ -74,6 +74,9 @@ class _RunScreenState extends State<RunScreen> {
     // 시작 전에도 지도에 내 위치가 보이도록 바로 GPS를 켭니다.
     _startGps();
     _startStepSensor();
+    // 러닝 중 알림을 보여주기 위한 권한 (안드로이드 13 이상).
+    // 거부해도 기록은 정상으로 됩니다. 알림만 안 보입니다.
+    LocationService.requestNotificationPermission();
   }
 
   @override
@@ -88,7 +91,10 @@ class _RunScreenState extends State<RunScreen> {
   // ----------------------------------------------------------
   // 위치 수신
   // ----------------------------------------------------------
-  Future<void> _startGps() async {
+  // keepAlive: 러닝 중에는 켭니다. 알림창에 "달리는 중" 알림을 띄우는 포그라운드 서비스가
+  // 함께 돌아서, 화면을 끄거나 다른 앱으로 넘어가도 위치가 계속 들어옵니다.
+  // 이게 없으면 안드로이드가 위치 전달을 끊어서 경로와 움직인 시간이 비게 됩니다.
+  Future<void> _startGps({bool keepAlive = false}) async {
     final String? error = await LocationService.ensurePermission();
     if (error != null) {
       _showMessage(error);
@@ -97,18 +103,19 @@ class _RunScreenState extends State<RunScreen> {
     if (!mounted || _useSimulator) return;
 
     await _positionSubscription?.cancel();
-    _positionSubscription = LocationService.positionStream().listen(
-      (position) {
-        // 오차가 큰 위치는 버립니다 (GPS 흔들림 때문에 거리가 쌓이는 것 방지)
-        if (position.accuracy > LocationService.maxAccuracyMeters) return;
-        _onNewPosition(LatLng(position.latitude, position.longitude));
-      },
-      onError: (Object error) {
-        // 터널, 건물 사이 등에서 잠깐 신호를 놓치는 오류는 무시하고 다음 위치를 기다립니다.
-        // (onError가 없으면 처리되지 않은 오류로 앱에 쌓입니다)
-        debugPrint('GPS 오류: $error');
-      },
-    );
+    _positionSubscription =
+        LocationService.positionStream(keepAliveInBackground: keepAlive).listen(
+          (position) {
+            // 오차가 큰 위치는 버립니다 (GPS 흔들림 때문에 거리가 쌓이는 것 방지)
+            if (position.accuracy > LocationService.maxAccuracyMeters) return;
+            _onNewPosition(LatLng(position.latitude, position.longitude));
+          },
+          onError: (Object error) {
+            // 터널, 건물 사이 등에서 잠깐 신호를 놓치는 오류는 무시하고 다음 위치를 기다립니다.
+            // (onError가 없으면 처리되지 않은 오류로 앱에 쌓입니다)
+            debugPrint('GPS 오류: $error');
+          },
+        );
   }
 
   // GPS든 시뮬레이터든 새 위치는 모두 여기로 들어옵니다.
@@ -151,6 +158,8 @@ class _RunScreenState extends State<RunScreen> {
   void _start() {
     setState(() => _tracker.start(_position, DateTime.now()));
     _startUiTimer();
+    // 러닝이 시작됐으니 위치 수신을 백그라운드에서도 살아 있는 방식으로 바꿉니다.
+    _startGps(keepAlive: true);
   }
 
   void _pause() {
@@ -181,6 +190,8 @@ class _RunScreenState extends State<RunScreen> {
         _isSaving = false;
         _tracker.reset();
       });
+      // 러닝이 끝났으니 "달리는 중" 알림을 내립니다.
+      _startGps();
       showRunReport(context, record, reward);
     } catch (e) {
       // 저장에 실패하면 기록을 그대로 두고 일시정지 상태로 두어 다시 시도할 수 있게 합니다.
@@ -338,12 +349,14 @@ class _RunScreenState extends State<RunScreen> {
             ),
             PolylineLayer(
               polylines: [
-                if (_tracker.path.length >= 2)
-                  Polyline(
-                    points: _tracker.path,
-                    strokeWidth: 6,
-                    color: AppColors.black,
-                  ),
+                // 토막마다 따로 긋습니다. 신호가 끊겼던 구간이 직선으로 이어지지 않습니다.
+                for (final segment in _tracker.segments)
+                  if (segment.length >= 2)
+                    Polyline(
+                      points: segment,
+                      strokeWidth: 6,
+                      color: AppColors.black,
+                    ),
               ],
             ),
             MarkerLayer(

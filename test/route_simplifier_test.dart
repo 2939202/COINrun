@@ -29,7 +29,10 @@ void main() {
       final corner = <LatLng>[
         for (int i = 0; i <= 10; i++) _north(i * 10.0),
         for (int i = 1; i <= 10; i++)
-          LatLng(37.5665 + 100 / _metersPerLat, 126.9780 + i * 10 / metersPerLon),
+          LatLng(
+            37.5665 + 100 / _metersPerLat,
+            126.9780 + i * 10 / metersPerLon,
+          ),
       ];
 
       final simplified = RouteSimplifier.simplify(corner);
@@ -86,6 +89,5 @@ void main() {
       expect(simplified.length, lessThanOrEqualTo(300));
       expect(simplified.length, greaterThan(20)); // 모양이 뭉개질 만큼 줄지는 않음
     });
-
   });
 }

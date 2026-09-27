@@ -24,16 +24,14 @@ UserModel _user({
   totalSteps: 0,
 );
 
-RunRecord _record({
-  Duration movingTime = Duration.zero,
-  int steps = 0,
-}) => RunRecord(
-  elapsed: movingTime,
-  movingTime: movingTime,
-  distanceMeters: 0,
-  steps: steps,
-  stepsEstimated: false,
-);
+RunRecord _record({Duration movingTime = Duration.zero, int steps = 0}) =>
+    RunRecord(
+      elapsed: movingTime,
+      movingTime: movingTime,
+      distanceMeters: 0,
+      steps: steps,
+      stepsEstimated: false,
+    );
 
 void main() {
   group('구매 판정', () {

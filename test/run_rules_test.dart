@@ -109,6 +109,59 @@ void main() {
 
     // 조이스틱 모드에서 골드가 거리만 보고 오르는지 확인합니다.
     // run_screen이 하는 일과 같은 순서: 센서값 한 번 수신 -> 시작 -> 조이스틱 켜기 -> 5m씩 이동
+    // 화면을 끄고 몇 분 지나면 위치 전달이 끊깁니다. 앱으로 돌아올 때 들어오는
+    // 첫 위치는 멀찍이 떨어져 있는데, 그 직선은 실제로 지나온 길이 아닙니다.
+    test('신호가 끊겼다 돌아온 먼 점프는 거리에 더하지 않는다', () {
+      final tracker = RunTracker()..start(_north(0), t0);
+      tracker.addPosition(_north(1), t0.add(const Duration(seconds: 5)));
+      final double before = tracker.record.distanceMeters;
+
+      // 5분 뒤 1km 떨어진 곳에서 돌아옴
+      tracker.addPosition(_north(90), t0.add(const Duration(minutes: 5)));
+
+      expect(tracker.record.distanceMeters, before);
+      expect(before, closeTo(11.1, 0.5));
+    });
+
+    test('먼 점프는 경로를 끊어서 새 토막으로 시작한다', () {
+      final tracker = RunTracker()..start(_north(0), t0);
+      tracker.addPosition(_north(1), t0.add(const Duration(seconds: 5)));
+      expect(tracker.segments.length, 1);
+
+      tracker.addPosition(_north(90), t0.add(const Duration(minutes: 5)));
+      expect(tracker.segments.length, 2);
+
+      // 돌아온 자리에서 이어 뛴 것은 새 토막에 정상으로 쌓입니다.
+      tracker.addPosition(
+        _north(91),
+        t0.add(const Duration(minutes: 5, seconds: 5)),
+      );
+      expect(tracker.segments.last.length, 2);
+      expect(tracker.record.distanceMeters, closeTo(22.2, 1));
+    });
+
+    test('가까운 점프는 원래대로 거리에 더한다 (신호가 잠깐만 끊긴 경우)', () {
+      final tracker = RunTracker()..start(_north(0), t0);
+      // 150m 떨어진 점 - 기준(200m) 안쪽이라 그대로 인정
+      tracker.addPosition(_north(14), t0.add(const Duration(seconds: 40)));
+
+      expect(tracker.record.distanceMeters, closeTo(155.8, 2));
+      expect(tracker.segments.length, 1);
+    });
+
+    test('일시정지했다 재개하면 그 사이를 선으로 잇지 않는다', () {
+      final tracker = RunTracker()..start(_north(0), t0);
+      tracker.addPosition(_north(1), t0.add(const Duration(seconds: 5)));
+      tracker.pause();
+      tracker.resume(t0.add(const Duration(minutes: 3)));
+      tracker.addPosition(
+        _north(2),
+        t0.add(const Duration(minutes: 3, seconds: 5)),
+      );
+
+      expect(tracker.segments.length, 2);
+    });
+
     test('조이스틱 모드에서는 골드가 거리로 오른다 (7.5m당 1골드)', () {
       const double metersPerDegreeLat = 111320;
       LatLng at(int taps) =>
@@ -120,7 +173,10 @@ void main() {
       tracker.disableStepSensor(); // 조이스틱 켜기
 
       for (int taps = 1; taps <= 20; taps++) {
-        tracker.addPosition(at(taps), t0.add(Duration(milliseconds: 150 * taps)));
+        tracker.addPosition(
+          at(taps),
+          t0.add(Duration(milliseconds: 150 * taps)),
+        );
       }
 
       final record = tracker.record;

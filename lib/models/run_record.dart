@@ -7,7 +7,9 @@ class RunRecord {
   final double distanceMeters;
   final int steps; // 걸음 수 -> 골드 기준
   final bool stepsEstimated; // 걸음 센서가 없어 거리로 추정한 값인지
-  final List<LatLng> path; // 지나온 길. 완료 리포트와 기록 상세의 지도에 그립니다.
+  // 지나온 길. 완료 리포트와 기록 상세의 지도에 그립니다.
+  // 토막 여럿인 이유: 신호가 오래 끊긴 구간을 선으로 잇지 않기 위해서입니다.
+  final List<List<LatLng>> segments;
 
   const RunRecord({
     required this.elapsed,
@@ -15,8 +17,11 @@ class RunRecord {
     required this.distanceMeters,
     required this.steps,
     required this.stepsEstimated,
-    this.path = const [],
+    this.segments = const [],
   });
+
+  // 토막을 신경 쓰지 않고 점만 필요할 때
+  List<LatLng> get path => [for (final segment in segments) ...segment];
 
   double get distanceKm => distanceMeters / 1000;
 

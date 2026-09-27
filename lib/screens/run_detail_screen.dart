@@ -30,7 +30,7 @@ class RunDetailScreen extends StatelessWidget {
       body: ListView(
         children: [
           // 어디를 뛰었는지
-          SizedBox(height: 300, child: RouteMap(path: run.path)),
+          SizedBox(height: 300, child: RouteMap(segments: run.segments)),
 
           Padding(
             padding: const EdgeInsets.all(AppSpacing.lg),
