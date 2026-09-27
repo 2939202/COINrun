@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../game/equipment_catalog.dart';
 import '../game/equipment_rules.dart';
@@ -20,6 +21,12 @@ class UserRepository {
 
   static final UserRepository instance = UserRepository._();
 
+  // 한 사람당 보관하는 러닝 기록 개수. 넘으면 오래된 것부터 지웁니다.
+  //
+  // 기록 하나가 경로까지 합쳐 7KB쯤이라 용량이 문제될 일은 없지만, 목록을 읽을 때마다
+  // 따라오는 양이 늘어나서 일단 막아둡니다. 더 필요해지면 이 숫자만 올리면 됩니다.
+  static const int maxStoredRuns = 20;
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   DocumentReference<Map<String, dynamic>> _userDoc(String userId) =>
@@ -34,7 +41,8 @@ class UserRepository {
   }
 
   // 최근 러닝 기록 (최신순)
-  Stream<List<RunLog>> watchRecentRuns(String userId, {int limit = 3}) {
+  // limit을 주지 않으면 보관하는 개수만큼 전부 봅니다. (전체 기록 화면)
+  Stream<List<RunLog>> watchRecentRuns(String userId, {int limit = 5}) {
     return _userDoc(userId)
         .collection('runs')
         .orderBy('createdAt', descending: true)
@@ -73,7 +81,44 @@ class UserRepository {
   // 러닝 완료 시 호출: 보상을 계산해서 유저 문서에 더하고, 러닝 기록도 남깁니다.
   // 트랜잭션을 쓰는 이유: 읽고 -> 계산하고 -> 쓰는 사이에 다른 곳에서 값이 바뀌어도
   // 골드가 덮어써져 사라지지 않도록 하기 위해서입니다.
-  Future<RunReward> saveRun(String userId, RunRecord run) {
+  Future<RunReward> saveRun(String userId, RunRecord run) async {
+    final RunReward reward = await _saveRunInTransaction(userId, run);
+
+    // 오래된 기록 정리는 보상 저장과 따로 합니다.
+    // 정리하다 실패해도 이미 받은 보상이 사라지면 안 되기 때문입니다.
+    try {
+      await _pruneOldRuns(userId);
+    } catch (error) {
+      // 다음 러닝 때 다시 정리하면 됩니다.
+      debugPrint('오래된 기록 정리 실패: $error');
+    }
+
+    return reward;
+  }
+
+  // 보관 개수를 넘은 만큼 오래된 기록부터 지웁니다.
+  Future<void> _pruneOldRuns(String userId) async {
+    final runs = _userDoc(userId).collection('runs');
+
+    // 문서를 받아오지 않고 개수만 셉니다.
+    final int total = (await runs.count().get()).count ?? 0;
+    final int extra = total - maxStoredRuns;
+    if (extra <= 0) return;
+
+    // 캐시가 아니라 서버에서 읽습니다. 지우는 작업이라 오래된 값으로 판단하면 안 됩니다.
+    final oldest = await runs
+        .orderBy('createdAt')
+        .limit(extra)
+        .get(const GetOptions(source: Source.server));
+
+    final batch = _firestore.batch();
+    for (final doc in oldest.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
+  Future<RunReward> _saveRunInTransaction(String userId, RunRecord run) {
     final userDoc = _userDoc(userId);
 
     return _firestore.runTransaction((transaction) async {

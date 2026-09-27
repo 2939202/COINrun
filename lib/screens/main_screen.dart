@@ -9,9 +9,11 @@ import '../services/ranking_repository.dart';
 import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
+import '../widgets/run_log_tile.dart';
 import '../widgets/stat_block.dart';
 import 'profile_screen.dart'; //프로필
 import 'ranking_screen.dart'; //랭킹
+import 'run_history_screen.dart'; //전체 기록
 import 'run_detail_screen.dart'; //러닝 기록 상세
 import 'run_screen.dart'; //달리기 시작
 import 'settings_screen.dart'; //설정
@@ -167,7 +169,16 @@ class _MainScreenState extends State<MainScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('최근 러닝', style: textTheme.titleLarge),
+        Row(
+          children: [
+            Text('최근 러닝', style: textTheme.titleLarge),
+            const Spacer(),
+            TextButton(
+              onPressed: () => _open(RunHistoryScreen(userId: _userId)),
+              child: const Text('전체 기록'),
+            ),
+          ],
+        ),
         const SizedBox(height: AppSpacing.sm),
         StreamBuilder<List<RunLog>>(
           stream: _recentRunsStream,
@@ -187,7 +198,7 @@ class _MainScreenState extends State<MainScreen> {
             return Column(
               children: [
                 for (final run in runs) ...[
-                  _RunLogTile(
+                  RunLogTile(
                     run: run,
                     onTap: () => _open(RunDetailScreen(run: run)),
                   ),
@@ -431,60 +442,6 @@ class _ShortcutCard extends StatelessWidget {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// 최근 러닝 한 줄
-class _RunLogTile extends StatelessWidget {
-  final RunLog run;
-  final VoidCallback onTap;
-
-  const _RunLogTile({required this.run, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final DateTime? date = run.createdAt;
-
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md - 4),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: const BoxDecoration(
-                color: AppColors.grey100,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.directions_run, size: 22),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${formatKm(run.distanceMeters)} km',
-                    style: textTheme.titleMedium,
-                  ),
-                  Text(
-                    '${date == null ? '방금' : formatMonthDay(date)} · '
-                    '${formatDuration(Duration(seconds: run.durationSeconds))}',
-                    style: textTheme.labelMedium,
-                  ),
-                ],
-              ),
-            ),
-            Text('+${run.goldEarned} G', style: textTheme.titleMedium),
-            const SizedBox(width: AppSpacing.xs),
-            const Icon(Icons.chevron_right, size: 20, color: AppColors.grey500),
-          ],
         ),
       ),
     );
