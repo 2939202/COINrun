@@ -92,6 +92,37 @@ void main() {
         (tracker.record.distanceMeters / 0.75).floor(),
       );
     });
+
+    // 안드로이드 걸음 센서는 구독하는 순간 "폰 켠 뒤 누적 걸음 수"를 한 번 뱉습니다.
+    // 그 값만 받고 이후 새 걸음이 없으면(= 시뮬레이터로 위치만 움직이는 상황)
+    // 걸음 수가 0에서 멈춰 골드가 쌓이지 않았습니다.
+    test('센서 값을 한 번만 받고 새 걸음이 없으면 걸음 수가 0이다', () {
+      final tracker = RunTracker()
+        ..addSensorSteps(12345) // 화면에 들어가자마자 들어오는 누적값
+        ..start(_north(0), t0);
+      tracker.addPosition(_north(10), t0.add(const Duration(seconds: 50)));
+
+      expect(tracker.record.distanceMeters, greaterThan(100));
+      expect(tracker.record.steps, 0);
+      expect(tracker.record.stepsEstimated, isFalse);
+    });
+
+    test('센서를 끄면 다시 거리로 걸음 수를 추정한다 (시뮬레이터용)', () {
+      final tracker = RunTracker()
+        ..addSensorSteps(12345)
+        ..start(_north(0), t0);
+      tracker.addPosition(_north(10), t0.add(const Duration(seconds: 50)));
+      expect(tracker.record.steps, 0);
+
+      tracker.disableStepSensor();
+
+      expect(tracker.record.stepsEstimated, isTrue);
+      expect(
+        tracker.record.steps,
+        (tracker.record.distanceMeters / 0.75).floor(),
+      );
+      expect(tracker.record.steps, greaterThan(0));
+    });
   });
 
   group('formatters', () {

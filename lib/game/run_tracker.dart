@@ -129,6 +129,18 @@ class RunTracker {
     if (speed >= minMovingSpeed) _movingTime += gap;
   }
 
+  // 걸음 센서를 쓰지 않는 상태로 되돌립니다. 다시 거리로 걸음 수를 추정합니다.
+  //
+  // 개발용 시뮬레이터를 켤 때 부릅니다. 시뮬레이터는 위치만 가짜로 움직이고
+  // 진짜 걸음은 생기지 않기 때문에, 센서를 켜둔 채로 두면 걸음 수가 0에서 멈추고
+  // 골드도 쌓이지 않습니다.
+  void disableStepSensor() {
+    _hasStepSensor = false;
+    _latestSensorSteps = null;
+    _segmentStartSteps = null;
+    _stepsBeforeSegment = 0;
+  }
+
   void addSensorSteps(int totalSteps) {
     _hasStepSensor = true;
     _latestSensorSteps = totalSteps;

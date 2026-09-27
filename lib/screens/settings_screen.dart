@@ -80,32 +80,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _editNickname(String current) async {
-    final controller = TextEditingController(text: current);
     final String? name = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('닉네임 바꾸기'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 12,
-          decoration: const InputDecoration(hintText: '12자까지'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('저장'),
-          ),
-        ],
-      ),
+      builder: (context) => NicknameDialog(current: current),
     );
-    controller.dispose();
 
-    if (name == null || name.isEmpty || name == current) return;
+    if (name == null || name == current) return;
     await UserRepository.instance.updateNickname(widget.userId, name);
     _toast('닉네임을 바꿨습니다.');
   }
@@ -207,6 +187,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// 닉네임 바꾸기 다이얼로그
+//
+// 입력칸 컨트롤러를 이 위젯이 직접 들고 있다가 dispose에서 버립니다.
+// showDialog가 돌려주는 Future는 다이얼로그가 닫히기 시작할 때 이미 끝나는데,
+// 닫히는 애니메이션이 도는 동안 TextField는 계속 다시 그려집니다.
+// 그래서 바깥에서 컨트롤러를 만들고 Future가 끝나자마자 버리면
+// "A TextEditingController was used after being disposed" 오류로 빨간 화면이 뜹니다.
+class NicknameDialog extends StatefulWidget {
+  final String current;
+
+  const NicknameDialog({super.key, required this.current});
+
+  @override
+  State<NicknameDialog> createState() => _NicknameDialogState();
+}
+
+class _NicknameDialogState extends State<NicknameDialog> {
+  static const int maxLength = 12;
+
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.current,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  // 빈 이름으로 저장되면 홈 화면에 이름이 사라지므로 막습니다.
+  void _submit() {
+    final String name = _controller.text.trim();
+    if (name.isEmpty) return;
+    Navigator.pop(context, name);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('닉네임 바꾸기'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        maxLength: maxLength,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => _submit(),
+        decoration: const InputDecoration(hintText: '$maxLength자까지'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('취소'),
+        ),
+        // 빈 칸이면 저장 버튼을 눌러도 아무 일이 없도록 아예 잠급니다.
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _controller,
+          builder: (context, value, child) => TextButton(
+            onPressed: value.text.trim().isEmpty ? null : _submit,
+            child: const Text('저장'),
+          ),
+        ),
+      ],
     );
   }
 }

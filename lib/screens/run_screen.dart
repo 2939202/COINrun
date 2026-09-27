@@ -212,14 +212,25 @@ class _RunScreenState extends State<RunScreen> {
   // 개발용 시뮬레이터
   // ----------------------------------------------------------
   void _toggleSimulator() {
-    setState(() => _useSimulator = !_useSimulator);
-    if (_useSimulator) {
+    final bool turningOn = !_useSimulator;
+
+    if (turningOn) {
       _positionSubscription?.cancel();
       _positionSubscription = null;
-      _currentPosition ??= _defaultPosition;
+      // 시뮬레이터는 위치만 가짜로 움직입니다. 진짜 걸음은 생기지 않으므로
+      // 걸음 센서를 꺼서, 거리로 걸음 수를 추정하게 해야 골드가 쌓입니다.
+      _stepSubscription?.cancel();
+      _stepSubscription = null;
+      setState(() {
+        _useSimulator = true;
+        _tracker.disableStepSensor();
+        _currentPosition ??= _defaultPosition;
+      });
     } else {
       _stopSimulatorMove();
+      setState(() => _useSimulator = false);
       _startGps();
+      _startStepSensor();
     }
   }
 
