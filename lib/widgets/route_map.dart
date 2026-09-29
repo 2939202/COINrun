@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../models/run_route.dart';
 import '../theme/app_theme.dart';
+import 'map_tiles.dart';
 
 // ============================================================
 // 다 뛴 뒤에 경로만 보여주는 작은 지도
@@ -46,10 +47,7 @@ class RouteMap extends StatelessWidget {
         ),
       ),
       children: [
-        TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.example.contact',
-        ),
+        MapTiles.layer(),
         PolylineLayer(
           polylines: [
             for (final segment in drawable)
@@ -79,6 +77,7 @@ class RouteMap extends StatelessWidget {
             ),
           ],
         ),
+        MapTiles.attribution(),
       ],
     );
   }

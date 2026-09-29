@@ -20,6 +20,7 @@ import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/home_widgets.dart' show DoubleRule, TotalBlock;
+import '../widgets/map_tiles.dart';
 import '../widgets/notched_box.dart';
 import 'run_report.dart';
 
@@ -451,10 +452,7 @@ class _RunScreenState extends State<RunScreen> {
             onMapReady: () => _isMapReady = true,
           ),
           children: [
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.example.contact',
-            ),
+            MapTiles.layer(),
             PolylineLayer(
               polylines: [
                 // 토막마다 따로 긋습니다. 신호가 끊겼던 구간이 직선으로 이어지지 않습니다.
@@ -480,6 +478,7 @@ class _RunScreenState extends State<RunScreen> {
                 ),
               ],
             ),
+            MapTiles.attribution(),
           ],
         ),
         // 진단 줄은 지도 위에 얹습니다. 아래 패널에 넣으면 화면이 좁아서 잘립니다.
