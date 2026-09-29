@@ -166,26 +166,34 @@ class _MainScreenState extends State<MainScreen> {
         AppSpacing.lg,
         AppSpacing.md,
       ),
-      child: NotchedBox(
-        onTap: () => _open(RunScreen(userId: _userId)),
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.play_arrow_rounded,
-              color: AppColors.white,
-              size: 26,
+      // 시작 버튼은 각지지 않은 둥근 모양입니다. (모서리 자르기는 검은 레벨 카드에만)
+      child: Material(
+        color: AppColors.black,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _open(RunScreen(userId: _userId)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md + 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.play_arrow_rounded,
+                  color: AppColors.white,
+                  size: 24,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  '러닝 시작',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: AppColors.white,
+                    fontSize: 20,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: AppSpacing.sm),
-            Text(
-              '러닝 시작',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: AppColors.white,
-                fontSize: 22,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

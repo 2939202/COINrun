@@ -22,6 +22,12 @@ class AppColors {
   // 포인트 색. 아껴서 씁니다. (레벨업, 지도 경로, 내 순위 강조)
   static const Color accent = Color(0xFF8A6A3E);
 
+  // 검은 카드 위에 올리는 포인트색. 어두운 갈색은 검정 위에서 읽히지 않아 밝게 씁니다.
+  static const Color accentOnDark = Color(0xFFC9A87C);
+
+  // 검은 카드 위의 빈 칸(진행바 바닥). 너무 어두우면 막대가 아예 안 보입니다.
+  static const Color trackOnDark = Color(0xFF4B4139);
+
   static const Color cream = Color(0xFFF5EDE0); // 카드 배경
   static const Color creamDeep = Color(0xFFF1E8D7); // 캐릭터/잡화점 같은 화면 배경
   static const Color sand = Color(0xFFDBD6C0); // 구분선, 진행바 바닥

@@ -39,7 +39,7 @@ class HomeHeader extends StatelessWidget {
               const SizedBox(height: AppSpacing.xs),
               Text(
                 user.nickname,
-                style: textTheme.headlineMedium?.copyWith(fontSize: 32),
+                style: textTheme.headlineMedium?.copyWith(fontSize: 28),
                 overflow: TextOverflow.ellipsis,
               ),
             ],
@@ -50,7 +50,7 @@ class HomeHeader extends StatelessWidget {
         IconButton(
           tooltip: '설정',
           onPressed: onSettings,
-          icon: const Icon(Icons.wb_sunny_outlined),
+          icon: const Icon(Icons.settings_outlined),
         ),
       ],
     );
@@ -70,35 +70,45 @@ class LevelCard extends StatelessWidget {
     final double progress = (user.exp / needed).clamp(0.0, 1.0);
 
     return NotchedBox(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      cut: 16,
+      radius: 20,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.lg,
+        AppSpacing.md,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text('LEVEL', style: AppTheme.caption),
+              Text(
+                'LEVEL',
+                style: AppTheme.caption.copyWith(color: AppColors.accentOnDark),
+              ),
               const Spacer(),
               // 등급표
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md - 4,
-                  vertical: AppSpacing.sm - 2,
+                  horizontal: AppSpacing.sm + 2,
+                  vertical: 3,
                 ),
                 decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.accent, width: 1.4),
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  border: Border.all(color: AppColors.accentOnDark, width: 1.3),
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   RunRules.tierName(user.level),
                   style: textTheme.titleMedium?.copyWith(
-                    color: AppColors.accent,
-                    fontSize: 14,
+                    color: AppColors.accentOnDark,
+                    fontSize: 13,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: AppSpacing.xs),
 
           // 큰 레벨 숫자 + 오른쪽에 다음 레벨
           Row(
@@ -107,7 +117,7 @@ class LevelCard extends StatelessWidget {
               Text(
                 '${user.level}',
                 style: AppTheme.number.copyWith(
-                  fontSize: 88,
+                  fontSize: 64,
                   color: AppColors.white,
                 ),
               ),
@@ -115,12 +125,18 @@ class LevelCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text('NEXT', style: AppTheme.caption.copyWith(fontSize: 11)),
-                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'NEXT',
+                    style: AppTheme.caption.copyWith(
+                      fontSize: 10,
+                      color: AppColors.accentOnDark,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
                   Text(
                     'Lv.${user.level + 1}',
                     style: AppTheme.number.copyWith(
-                      fontSize: 30,
+                      fontSize: 26,
                       color: AppColors.white,
                     ),
                   ),
@@ -128,10 +144,16 @@ class LevelCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.lg),
-
-          SegmentBar(progress: progress),
           const SizedBox(height: AppSpacing.md),
+
+          // 큰 숫자와 경험치 글자 사이의 진행 바
+          SegmentBar(
+            progress: progress,
+            filledColor: AppColors.accentOnDark,
+            emptyColor: AppColors.trackOnDark,
+            height: 9,
+          ),
+          const SizedBox(height: AppSpacing.sm + 2),
 
           Row(
             children: [
@@ -143,6 +165,7 @@ class LevelCard extends StatelessWidget {
                       '${user.exp}',
                       style: textTheme.titleMedium?.copyWith(
                         color: AppColors.white,
+                        fontSize: 14,
                       ),
                     ),
                     Flexible(
@@ -150,6 +173,7 @@ class LevelCard extends StatelessWidget {
                         ' / $needed EXP',
                         style: textTheme.bodyMedium?.copyWith(
                           color: AppColors.sand,
+                          fontSize: 13,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -161,7 +185,10 @@ class LevelCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   '다음 레벨까지 ${needed - user.exp}',
-                  style: textTheme.bodyMedium?.copyWith(color: AppColors.sand),
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: AppColors.sand,
+                    fontSize: 13,
+                  ),
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.right,
                 ),
@@ -186,7 +213,7 @@ class TotalsRow extends StatelessWidget {
       children: [
         const DoubleRule(),
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm + 4),
           child: IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -248,9 +275,9 @@ class TotalBlock extends StatelessWidget {
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: center ? Alignment.center : Alignment.centerLeft,
-            child: Text(value, style: AppTheme.number.copyWith(fontSize: 30)),
+            child: Text(value, style: AppTheme.number.copyWith(fontSize: 27)),
           ),
-          const SizedBox(height: AppSpacing.sm),
+          const SizedBox(height: AppSpacing.xs + 1),
           Text(
             label,
             style: textTheme.bodyMedium?.copyWith(color: AppColors.mute),
@@ -533,39 +560,42 @@ class GoldPill extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm + 2,
-        vertical: AppSpacing.sm - 2,
+        horizontal: AppSpacing.sm,
+        vertical: 3,
       ),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: AppColors.accent, width: 1.4),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppColors.accent, width: 1.2),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 22,
-            height: 22,
+            width: 17,
+            height: 17,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: AppColors.cream,
               shape: BoxShape.circle,
-              border: Border.all(color: AppColors.gold, width: 1.6),
+              border: Border.all(color: AppColors.gold, width: 1.3),
             ),
             child: Text(
               'G',
               style: AppTheme.number.copyWith(
-                fontSize: 11,
+                fontSize: 9,
                 color: AppColors.gold,
               ),
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
-          Text('$gold', style: AppTheme.number.copyWith(fontSize: 18)),
-          const SizedBox(width: 3),
+          const SizedBox(width: AppSpacing.xs + 1),
+          Text('$gold', style: AppTheme.number.copyWith(fontSize: 14)),
+          const SizedBox(width: 2),
           Text(
             'G',
-            style: textTheme.labelMedium?.copyWith(color: AppColors.black),
+            style: textTheme.labelMedium?.copyWith(
+              color: AppColors.black,
+              fontSize: 10,
+            ),
           ),
         ],
       ),
