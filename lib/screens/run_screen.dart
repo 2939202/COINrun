@@ -19,7 +19,8 @@ import '../services/step_service.dart';
 import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
-import '../widgets/stat_block.dart';
+import '../widgets/home_widgets.dart' show DoubleRule, TotalBlock;
+import '../widgets/notched_box.dart';
 import 'run_report.dart';
 
 // ============================================================
@@ -515,7 +516,6 @@ class _RunScreenState extends State<RunScreen> {
   }
 
   Widget _buildPanel() {
-    final textTheme = Theme.of(context).textTheme;
     final RunRecord record = _tracker.record;
 
     return SafeArea(
@@ -542,23 +542,56 @@ class _RunScreenState extends State<RunScreen> {
                   // 메인 숫자: 러닝 시간
                   Text(
                     formatDuration(record.elapsed),
-                    style: textTheme.displayLarge,
+                    style: AppTheme.number.copyWith(fontSize: 62),
                   ),
-                  Text('시간', style: textTheme.labelMedium),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text('ELAPSED TIME', style: AppTheme.caption),
                   const SizedBox(height: AppSpacing.lg),
-                  Row(
-                    children: [
-                      StatBlock(
-                        value: formatKm(record.distanceMeters),
-                        label: '킬로미터',
+
+                  const DoubleRule(),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.md,
+                    ),
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: TotalBlock(
+                              value: formatKm(record.distanceMeters),
+                              label: '킬로미터',
+                              center: true,
+                            ),
+                          ),
+                          const VerticalDivider(
+                            color: AppColors.sand,
+                            width: 1,
+                          ),
+                          Expanded(
+                            child: TotalBlock(
+                              value: '${record.steps}',
+                              label: '걸음',
+                              center: true,
+                            ),
+                          ),
+                          const VerticalDivider(
+                            color: AppColors.sand,
+                            width: 1,
+                          ),
+                          Expanded(
+                            child: TotalBlock(
+                              value: formatPace(record.paceMinPerKm),
+                              label: '평균 페이스',
+                              center: true,
+                            ),
+                          ),
+                        ],
                       ),
-                      StatBlock(value: '${record.steps}', label: '걸음'),
-                      StatBlock(
-                        value: formatPace(record.paceMinPerKm),
-                        label: '평균 페이스',
-                      ),
-                    ],
+                    ),
                   ),
+                  const DoubleRule(),
+
                   const SizedBox(height: AppSpacing.lg),
                   _RewardPreview(userId: widget.userId, record: record),
                 ],
@@ -582,26 +615,24 @@ class _RunScreenState extends State<RunScreen> {
 
     switch (_tracker.state) {
       case RunState.idle:
-        return SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(onPressed: _start, child: const Text('시작')),
-        );
+        return _RunButton(label: '시작', onTap: _start);
       case RunState.running:
         return Row(
           children: [
             Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _pause,
-                icon: const Icon(Icons.pause),
-                label: const Text('일시정지'),
+              child: _RunButton(
+                label: '일시정지',
+                icon: Icons.pause,
+                onTap: _pause,
               ),
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _finish,
-                icon: const Icon(Icons.stop),
-                label: const Text('완료'),
+              child: _RunButton(
+                label: '완료',
+                icon: Icons.stop,
+                filled: false,
+                onTap: _finish,
               ),
             ),
           ],
@@ -610,22 +641,19 @@ class _RunScreenState extends State<RunScreen> {
         return Row(
           children: [
             Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _resume,
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('재개'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accent,
-                  foregroundColor: AppColors.black,
-                ),
+              child: _RunButton(
+                label: '재개',
+                icon: Icons.play_arrow,
+                onTap: _resume,
               ),
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _finish,
-                icon: const Icon(Icons.stop),
-                label: const Text('완료'),
+              child: _RunButton(
+                label: '완료',
+                icon: Icons.stop,
+                filled: false,
+                onTap: _finish,
               ),
             ),
           ],
@@ -637,6 +665,64 @@ class _RunScreenState extends State<RunScreen> {
 // ------------------------------------------------------------
 // 작은 위젯들
 // ------------------------------------------------------------
+
+// 러닝 화면 아래 버튼. 모서리가 잘린 모양을 홈의 "러닝 시작"과 맞춥니다.
+class _RunButton extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final bool filled;
+  final VoidCallback onTap;
+
+  const _RunButton({
+    required this.label,
+    required this.onTap,
+    this.icon,
+    this.filled = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Color background = filled ? AppColors.black : AppColors.white;
+    final Color foreground = filled ? AppColors.white : AppColors.black;
+
+    final Widget body = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (icon != null) ...[
+          Icon(icon, color: foreground, size: 20),
+          const SizedBox(width: AppSpacing.sm),
+        ],
+        Text(
+          label,
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(color: foreground),
+        ),
+      ],
+    );
+
+    if (filled) {
+      return NotchedBox(
+        onTap: onTap,
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md + 2),
+        child: body,
+      );
+    }
+    // 완료 버튼은 테두리만. 잘린 모양은 안쪽 검은 테두리로 흉내냅니다.
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md + 2),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          border: Border.all(color: AppColors.black, width: 1.6),
+        ),
+        child: body,
+      ),
+    );
+  }
+}
 
 // 달리는 중 "지금까지 얻은 보상" 미리보기
 // 완료 리포트와 숫자가 어긋나지 않도록, 입고 있는 장비 보너스까지 반영해서 보여줍니다.
@@ -663,11 +749,11 @@ class _RewardPreviewState extends State<_RewardPreview> {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm + 4,
+        vertical: AppSpacing.md - 2,
       ),
       decoration: BoxDecoration(
         color: AppColors.cream,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Row(
         children: [

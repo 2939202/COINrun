@@ -6,6 +6,7 @@ import '../models/user_model.dart';
 import '../services/ranking_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
+import '../widgets/notched_box.dart';
 
 // ============================================================
 // 랭킹 화면
@@ -46,6 +47,20 @@ class _RankingScreenState extends State<RankingScreen>
         title: const Text('랭킹'),
         bottom: TabBar(
           controller: _tabs,
+          indicatorColor: AppColors.black,
+          indicatorWeight: 3,
+          indicatorSize: TabBarIndicatorSize.tab,
+          labelColor: AppColors.black,
+          unselectedLabelColor: AppColors.mute,
+          labelStyle: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
+          dividerColor: AppColors.sand,
           tabs: [for (final kind in RankingKind.values) Tab(text: kind.label)],
         ),
       ),
@@ -87,40 +102,49 @@ class _RankingListState extends State<_RankingList> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _MyRankCard(kind: widget.kind, user: widget.user, rank: _myRank),
-        const Divider(height: 1),
-        Expanded(
-          child: StreamBuilder<List<RankingEntry>>(
-            stream: _top,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return const _Message('랭킹을 불러오지 못했습니다.\n인터넷 연결을 확인해 주세요.');
-              }
+    // 내 순위 카드에 "/ N명"을 보여주려면 목록 개수가 필요해서 한 스트림으로 묶습니다.
+    return StreamBuilder<List<RankingEntry>>(
+      stream: _top,
+      builder: (context, snapshot) {
+        final List<RankingEntry> entries = snapshot.data ?? const [];
+        return Column(
+          children: [
+            _MyRankCard(
+              kind: widget.kind,
+              user: widget.user,
+              rank: _myRank,
+              total: entries.length,
+            ),
+            Expanded(child: _buildList(snapshot, entries)),
+          ],
+        );
+      },
+    );
+  }
 
-              final List<RankingEntry> entries = snapshot.data ?? [];
-              if (entries.isEmpty) {
-                return const _Message('아직 아무도 달리지 않았어요.\n첫 번째가 되어 보세요.');
-              }
+  Widget _buildList(
+    AsyncSnapshot<List<RankingEntry>> snapshot,
+    List<RankingEntry> entries,
+  ) {
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (snapshot.hasError) {
+      return const _Message('랭킹을 불러오지 못했습니다.\n인터넷 연결을 확인해 주세요.');
+    }
+    if (entries.isEmpty) {
+      return const _Message('아직 아무도 달리지 않았어요.\n첫 번째가 되어 보세요.');
+    }
 
-              return ListView.separated(
-                itemCount: entries.length,
-                separatorBuilder: (context, index) => const Divider(height: 1),
-                itemBuilder: (context, index) => _RankRow(
-                  rank: index + 1,
-                  entry: entries[index],
-                  kind: widget.kind,
-                  isMe: entries[index].userId == widget.userId,
-                ),
-              );
-            },
-          ),
-        ),
-      ],
+    return ListView.separated(
+      itemCount: entries.length,
+      separatorBuilder: (context, index) => const Divider(height: 1),
+      itemBuilder: (context, index) => _RankRow(
+        rank: index + 1,
+        entry: entries[index],
+        kind: widget.kind,
+        isMe: entries[index].userId == widget.userId,
+      ),
     );
   }
 }
@@ -130,85 +154,128 @@ class _MyRankCard extends StatelessWidget {
   final RankingKind kind;
   final UserModel user;
   final Future<int?> rank;
+  final int total;
 
   const _MyRankCard({
     required this.kind,
     required this.user,
     required this.rank,
+    required this.total,
   });
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
-    return Container(
-      color: AppColors.black,
+    return Padding(
       padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('내 순위', style: textTheme.labelMedium),
-                const SizedBox(height: AppSpacing.xs),
-                FutureBuilder<int?>(
-                  future: rank,
-                  builder: (context, snapshot) {
-                    final bool waiting =
-                        snapshot.connectionState == ConnectionState.waiting;
-                    final int? myRank = snapshot.data;
-                    // 게스트는 랭킹에 줄이 없고, 뛴 적이 없으면 순위가 없습니다.
-                    final String text = waiting
-                        ? '...'
-                        : (myRank == null
-                              ? (user.isGuest ? '게스트' : '기록 없음')
-                              : '$myRank위');
-                    return Text(
-                      text,
-                      style: textTheme.displayLarge?.copyWith(
-                        color: waiting ? AppColors.white : AppColors.accent,
-                        fontSize: (!waiting && myRank == null) ? 28 : 40,
-                      ),
-                    );
-                  },
-                ),
-              ],
+      child: NotchedBox(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'MY RANK',
+                    style: AppTheme.caption.copyWith(fontSize: 11),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  FutureBuilder<int?>(
+                    future: rank,
+                    builder: (context, snapshot) {
+                      final bool waiting =
+                          snapshot.connectionState == ConnectionState.waiting;
+                      final int? myRank = snapshot.data;
+                      // 게스트는 랭킹에 줄이 없고, 뛴 적이 없으면 순위가 없습니다.
+                      if (waiting) {
+                        return Text(
+                          '...',
+                          style: AppTheme.number.copyWith(
+                            fontSize: 40,
+                            color: AppColors.white,
+                          ),
+                        );
+                      }
+                      if (myRank == null) {
+                        return Text(
+                          user.isGuest ? '게스트' : '기록 없음',
+                          style: textTheme.titleLarge?.copyWith(
+                            color: AppColors.white,
+                          ),
+                        );
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            '$myRank',
+                            style: AppTheme.number.copyWith(
+                              fontSize: 44,
+                              color: AppColors.white,
+                            ),
+                          ),
+                          Text(
+                            '위',
+                            style: textTheme.titleLarge?.copyWith(
+                              color: AppColors.white,
+                            ),
+                          ),
+                          Text(
+                            '  / $total명',
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: AppColors.sand,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                user.nickname,
-                style: textTheme.titleMedium?.copyWith(color: AppColors.white),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                rankingValueLabel(
-                  kind,
-                  totalDistance: user.totalDistance,
-                  level: user.level,
-                ),
-                style: textTheme.labelMedium,
-              ),
-              if (user.isGuest) ...[
-                const SizedBox(height: AppSpacing.xs),
-                SizedBox(
-                  width: 180,
-                  child: Text(
-                    '설정에서 계정을 저장하면 그동안의 기록 그대로 랭킹에 올라가요.',
-                    textAlign: TextAlign.right,
-                    style: textTheme.labelMedium?.copyWith(
-                      color: AppColors.accent,
-                      height: 1.3,
-                    ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  user.nickname,
+                  style: textTheme.titleMedium?.copyWith(
+                    color: AppColors.white,
                   ),
                 ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  rankingValueLabel(
+                    kind,
+                    totalDistance: user.totalDistance,
+                    level: user.level,
+                  ),
+                  style: AppTheme.number.copyWith(
+                    fontSize: 22,
+                    color: AppColors.accent,
+                  ),
+                ),
+                if (user.isGuest) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  SizedBox(
+                    width: 170,
+                    child: Text(
+                      '설정에서 계정을 저장하면 랭킹에 올라가요.',
+                      textAlign: TextAlign.right,
+                      style: textTheme.labelMedium?.copyWith(
+                        color: AppColors.accent,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
               ],
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -231,32 +298,33 @@ class _RankRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final Color text = isMe ? AppColors.white : AppColors.black;
+    final Color sub = isMe ? AppColors.sand : AppColors.mute;
 
     return Container(
-      // 목록에서 나를 빨리 찾을 수 있게 표시합니다.
-      color: isMe ? AppColors.accent : null,
+      // 목록에서 나를 빨리 찾을 수 있게 검게 칠합니다.
+      color: isMe ? AppColors.black : null,
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
         vertical: AppSpacing.md,
       ),
       child: Row(
         children: [
-          SizedBox(
-            width: 40,
-            child: Text('$rank', style: textTheme.titleLarge),
-          ),
+          _RankBadge(rank: rank, isMe: isMe),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   entry.nickname,
-                  style: textTheme.titleMedium,
+                  style: textTheme.titleMedium?.copyWith(color: text),
                   overflow: TextOverflow.ellipsis,
                 ),
+                const SizedBox(height: 2),
                 Text(
                   'Lv.${entry.level} · ${RunRules.tierName(entry.level)}',
-                  style: textTheme.labelMedium,
+                  style: textTheme.bodyMedium?.copyWith(color: sub),
                 ),
               ],
             ),
@@ -267,12 +335,89 @@ class _RankRow extends StatelessWidget {
               totalDistance: entry.totalDistance,
               level: entry.level,
             ),
-            style: textTheme.titleMedium,
+            style: AppTheme.number.copyWith(fontSize: 20, color: text),
           ),
+          if (kind == RankingKind.distance)
+            Text(' km', style: textTheme.labelMedium?.copyWith(color: sub)),
         ],
       ),
     );
   }
+}
+
+// 등수 동그라미.
+//   1등은 채워진 원, 2등은 테두리, 3등은 점선, 그 아래는 숫자만.
+class _RankBadge extends StatelessWidget {
+  final int rank;
+  final bool isMe;
+
+  const _RankBadge({required this.rank, required this.isMe});
+
+  @override
+  Widget build(BuildContext context) {
+    final TextStyle number = AppTheme.number.copyWith(
+      fontSize: 15,
+      color: isMe ? AppColors.white : AppColors.black,
+    );
+
+    if (rank > 3) {
+      return SizedBox(
+        width: 34,
+        child: Center(child: Text('$rank', style: number)),
+      );
+    }
+
+    return SizedBox(
+      width: 34,
+      height: 34,
+      child: CustomPaint(
+        painter: _BadgePainter(rank: rank),
+        child: Center(child: Text('$rank', style: number)),
+      ),
+    );
+  }
+}
+
+class _BadgePainter extends CustomPainter {
+  final int rank;
+
+  const _BadgePainter({required this.rank});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final double radius = size.shortestSide / 2 - 1;
+
+    if (rank == 1) {
+      canvas.drawCircle(center, radius, Paint()..color = AppColors.sand);
+    }
+
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..color = AppColors.accent;
+
+    if (rank == 3) {
+      // 3등은 점선 테두리
+      const int dashes = 16;
+      const double sweep = 6.283185 / dashes;
+      for (int i = 0; i < dashes; i += 2) {
+        canvas.drawArc(
+          Rect.fromCircle(center: center, radius: radius),
+          i * sweep,
+          sweep,
+          false,
+          stroke,
+        );
+      }
+      return;
+    }
+
+    canvas.drawCircle(center, radius, stroke);
+  }
+
+  @override
+  bool shouldRepaint(_BadgePainter oldDelegate) => oldDelegate.rank != rank;
 }
 
 // 기준에 맞는 값을 글자로
