@@ -6,57 +6,76 @@ import '../theme/app_theme.dart';
 // ============================================================
 // 지도 바탕 그림 (타일)
 //
-// [왜 기본 OpenStreetMap 타일을 쓰지 않나]
-//   기본 타일은 공원이 초록, 큰길이 노랑·주황으로 칠해져 있습니다. 색이 많아서
-//   우리 화면(먹색 + 크림)에 얹으면 지도만 혼자 튀고, 그 위의 경로선도 묻힙니다.
+// [고르면서 겪은 것]
+//   CARTO Positron - 회색만 쓰는 깔끔한 지도인데, 이제 열쇠(API key) 없이 받으면
+//     "key required" 안내 그림만 내려옵니다.
+//   Esri World Light Gray - 열쇠는 필요 없지만 z14부터 "Map data not yet available"
+//     입니다. 러닝은 z17쯤에서 봐야 해서 쓸 수 없습니다.
+//   OpenStreetMap 기본 - z17에서도 잘 나오고 지명도 한글입니다. 대신 공원이 초록,
+//     큰길이 노랑·주황이라 색이 많습니다.
 //
-// [CARTO Positron을 쓰지 않는 이유]
-//   회색만 쓰는 깔끔한 지도라 처음에 골랐는데, 이제 열쇠(API key) 없이 받으면
-//   "key required"라고 적힌 안내 그림만 내려옵니다. 지도가 아예 안 보입니다.
+//   그래서 OpenStreetMap을 쓰되, 색을 빼서 조용하게 만듭니다.
 //
-// [Esri World Light Gray]
-//   회색과 흰색만 쓰는 바탕지도입니다. 열쇠 없이 받을 수 있고, 실제로 타일을 받아서
-//   확인했습니다. 길 모양만 남아 있어서 그 위의 경로선이 또렷합니다.
+// [어떻게 조용하게 만드나]
+//   1. 채도를 22%만 남깁니다. 초록 공원과 노란 길이 따뜻한 회색이 됩니다.
+//      글자는 원래 검은색이라 그대로 읽힙니다.
+//   2. 크림색을 곱해서 종이색 쪽으로 당깁니다.
 //
-//   바탕과 지명이 따로 내려옵니다. 지명을 빼면 더 조용하지만 어디인지 알기 어려워서
-//   둘 다 얹습니다. 다만 지명이 영어로 나옵니다. (Yongsan-Gu)
-//
-// [따뜻하게 물들이기]
-//   바탕이 차가운 회색이라 크림색 화면과 나란히 두면 파랗게 떠 보입니다.
-//   크림색을 곱해서(modulate) 종이색 쪽으로 당깁니다. 지명은 건드리지 않습니다.
+//   색이 빠지면 그 위에 그린 경로선만 또렷하게 남습니다.
 //
 // [출처 표시]
-//   Esri는 지도에 출처를 적어두기를 요구합니다. 지도를 쓰는 곳마다 같이 넣어야 해서
-//   타일과 한 파일에 묶어둡니다.
+//   OpenStreetMap은 지도에 출처를 적어두기를 요구합니다. 지도를 쓰는 곳마다 같이
+//   넣어야 해서 타일과 한 파일에 묶어둡니다.
 // ============================================================
 class MapTiles {
   MapTiles._();
 
-  static const String _base =
-      'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/'
-      'World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+  static const String _url = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
-  static const String _labels =
-      'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/'
-      'World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}';
+  static const String attributionText = '© OpenStreetMap contributors';
 
-  static const String attributionText = '© Esri · © OpenStreetMap';
-
-  static const String _userAgent = 'com.example.contact';
+  // 채도를 낮추는 행렬. 마지막 줄은 투명도라 건드리지 않습니다.
+  static const List<double> _desaturate = <double>[
+    0.3858,
+    0.5579,
+    0.0563,
+    0.0000,
+    0.0000,
+    0.1658,
+    0.7779,
+    0.0563,
+    0.0000,
+    0.0000,
+    0.1658,
+    0.5579,
+    0.2763,
+    0.0000,
+    0.0000,
+    0.0000,
+    0.0000,
+    0.0000,
+    1.0000,
+    0.0000,
+  ];
 
   // 지도 바탕. FlutterMap의 children 맨 앞에 펼쳐서(...) 넣습니다.
   static List<Widget> layers() {
     return [
       ColorFiltered(
-        // 크림색을 곱해서 차가운 회색을 따뜻하게 바꿉니다.
+        // 2) 종이색 쪽으로
         colorFilter: const ColorFilter.mode(
           AppColors.cream,
           BlendMode.modulate,
         ),
-        child: TileLayer(urlTemplate: _base, userAgentPackageName: _userAgent),
+        child: ColorFiltered(
+          // 1) 색 빼기
+          colorFilter: const ColorFilter.matrix(_desaturate),
+          child: TileLayer(
+            urlTemplate: _url,
+            userAgentPackageName: 'com.example.contact',
+          ),
+        ),
       ),
-      // 지명은 물들이지 않습니다. 흐려지면 읽기 어려워집니다.
-      TileLayer(urlTemplate: _labels, userAgentPackageName: _userAgent),
     ];
   }
 
