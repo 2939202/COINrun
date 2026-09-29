@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../models/run_log.dart';
@@ -28,6 +29,13 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
   late final Stream<List<RunLog>> _runs = UserRepository.instance
       .watchRecentRuns(widget.userId, limit: UserRepository.maxStoredRuns);
 
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   // 밀어서 치우기. 감추기는 목록에서만, 삭제는 통계에서도 빼냅니다.
   Future<void> _remove(RunLog run, RunRemoval how) async {
     try {
@@ -37,16 +45,19 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
         await UserRepository.instance.deleteRun(widget.userId, run);
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(how == RunRemoval.hide ? '기록을 감췄습니다.' : '기록을 삭제했습니다.'),
-        ),
-      );
-    } catch (_) {
+      _toast(how == RunRemoval.hide ? '기록을 감췄습니다.' : '기록을 삭제했습니다.');
+    } on FirebaseException catch (error) {
+      // 무엇 때문에 막혔는지 남깁니다.
+      // 예전에는 이유를 통째로 버려서 "처리하지 못했습니다"만 반복됐습니다.
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('처리하지 못했습니다. 잠시 후 다시 해주세요.')),
+      _toast(
+        error.code == 'permission-denied'
+            ? 'Firestore 규칙에 막혔습니다. 콘솔에 firestore.rules를 게시했는지 봐주세요.'
+            : '처리하지 못했습니다. (${error.code})',
       );
+    } catch (error) {
+      if (!mounted) return;
+      _toast('처리하지 못했습니다. ($error)');
     }
   }
 
@@ -107,9 +118,12 @@ class _Totals extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double distance = runs.fold(0, (sum, r) => sum + r.distanceMeters);
-    final int seconds = runs.fold(0, (sum, r) => sum + r.durationSeconds);
-    final int gold = runs.fold(0, (sum, r) => sum + r.goldEarned);
+    final double distance = runs.fold(
+      0,
+      (total, r) => total + r.distanceMeters,
+    );
+    final int seconds = runs.fold(0, (total, r) => total + r.durationSeconds);
+    final int gold = runs.fold(0, (total, r) => total + r.goldEarned);
 
     return Row(
       children: [

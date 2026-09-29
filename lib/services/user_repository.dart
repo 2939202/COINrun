@@ -189,20 +189,50 @@ class UserRepository {
     final runRef = _userDoc(userId).collection('runs').doc(run.id);
     final DateTime at = run.createdAt ?? DateTime.now();
 
+    final stats = _stats(userId);
+    final weekRef = stats.doc(StatsPeriod.weekKey(at));
+    final monthRef = stats.doc(StatsPeriod.monthKey(at));
+
     await _firestore.runTransaction((transaction) async {
-      // 요약에서 이 러닝의 몫을 빼냅니다.
-      _applyStats(
-        transaction: transaction,
-        userId: userId,
-        at: at,
-        distanceMeters: run.distanceMeters,
-        seconds: run.durationSeconds,
-        movingSeconds: run.movingSeconds,
-        steps: run.steps,
-        gold: run.goldEarned,
-        exp: run.expEarned,
-        sign: -1,
-      );
+      // 트랜잭션은 읽기를 모두 끝낸 뒤에 써야 합니다.
+      final weekSnapshot = await transaction.get(weekRef);
+      final monthSnapshot = await transaction.get(monthRef);
+
+      // 요약을 붙이기 전에 저장된 러닝은 요약에 들어간 적이 없습니다.
+      // 없는 칸에 빼기를 하면 "-1회, -5km"짜리 칸이 새로 생겨버립니다.
+      final periods = [
+        (
+          ref: weekRef,
+          exists: weekSnapshot.exists,
+          start: StatsPeriod.weekStart(at),
+          isWeek: true,
+        ),
+        (
+          ref: monthRef,
+          exists: monthSnapshot.exists,
+          start: StatsPeriod.monthStart(at),
+          isWeek: false,
+        ),
+      ];
+
+      for (final period in periods) {
+        if (!period.exists) continue;
+        transaction.set(
+          period.ref,
+          RunStats.changes(
+            startAt: period.start,
+            isWeek: period.isWeek,
+            distanceMeters: run.distanceMeters,
+            seconds: run.durationSeconds,
+            movingSeconds: run.movingSeconds,
+            steps: run.steps,
+            gold: run.goldEarned,
+            exp: run.expEarned,
+            sign: -1,
+          ),
+          SetOptions(merge: true),
+        );
+      }
 
       transaction.delete(runRef);
       transaction.delete(_routes(userId).doc(run.id));
