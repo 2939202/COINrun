@@ -15,6 +15,9 @@ import '../utils/formatters.dart';
 // 휴지통에 있는 동안에도 주간·월간 기록에서는 빠져 있습니다.
 // "삭제하면 주간·월간에서 빠집니다"라고 해놓고 계속 세고 있으면 말이 다르기 때문입니다.
 // 되살리면 다시 더해집니다.
+//
+// 버린 지 7일이 지나면 알아서 완전히 지워집니다. 서버가 따로 없어서, 이 화면을 열 때와
+// 러닝을 저장할 때 앱이 직접 정리합니다.
 // ============================================================
 class TrashScreen extends StatefulWidget {
   final String userId;
@@ -31,6 +34,13 @@ class _TrashScreenState extends State<TrashScreen> {
   );
 
   bool _isBusy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 기한이 지난 것을 먼저 치웁니다. 실패해도 목록은 그대로 보여줍니다.
+    UserRepository.instance.pruneTrash(widget.userId).catchError((_) {});
+  }
 
   void _toast(String message) {
     if (!mounted) return;
@@ -142,6 +152,16 @@ class _TrashScreenState extends State<TrashScreen> {
   }
 }
 
+// 자동 삭제까지 며칠 남았는지
+String _remaining(DateTime thrownAt) {
+  final DateTime gone = thrownAt.add(
+    const Duration(days: UserRepository.trashKeepDays),
+  );
+  final int days = gone.difference(DateTime.now()).inDays;
+  if (days <= 0) return '곧 자동 삭제';
+  return '$days일 뒤 자동 삭제';
+}
+
 class _TrashRow extends StatelessWidget {
   final RunLog run;
   final bool isBusy;
@@ -181,6 +201,11 @@ class _TrashRow extends StatelessWidget {
                   '${thrown == null ? '' : ' · ${formatMonthDay(thrown)} 버림'}',
                   style: textTheme.labelMedium,
                 ),
+                if (thrown != null)
+                  Text(
+                    _remaining(thrown),
+                    style: textTheme.labelMedium?.copyWith(color: Colors.red),
+                  ),
               ],
             ),
           ),
@@ -208,7 +233,7 @@ class _Empty extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xl),
         child: Text(
-          '휴지통이 비어 있어요.',
+          '휴지통이 비어 있어요.\n버린 기록은 ${UserRepository.trashKeepDays}일 동안 보관됩니다.',
           textAlign: TextAlign.center,
           style: Theme.of(
             context,

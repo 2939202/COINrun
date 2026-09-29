@@ -34,6 +34,12 @@ class UserRepository {
   // 더 늘려야 하면 경로를 별도 문서로 빼서 목록에선 안 읽게 하는 편이 낫습니다.
   static const int maxStoredRuns = 60;
 
+  // 휴지통은 러닝 기록과 따로 셉니다. 버린 것이 쌓여서 멀쩡한 기록을 밀어내면 안 됩니다.
+  static const int maxTrashedRuns = 60;
+
+  // 버린 지 이만큼 지나면 알아서 완전히 지웁니다.
+  static const int trashKeepDays = 7;
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   DocumentReference<Map<String, dynamic>> _userDoc(String userId) =>
@@ -67,6 +73,14 @@ class UserRepository {
               .toList(),
         );
   }
+
+  // 휴지통은 별도 컬렉션입니다.
+  //
+  // 같은 collection에 표시만 해두면 "버리지 않은 것만 60개" 같은 조건을 Firestore에
+  // 물어보기가 어렵습니다. (없는 필드를 기준으로는 거를 수 없습니다)
+  // 아예 옮겨두면 양쪽 개수를 따로 세는 일이 그냥 됩니다.
+  CollectionReference<Map<String, dynamic>> _trash(String userId) =>
+      _userDoc(userId).collection('trash');
 
   CollectionReference<Map<String, dynamic>> _routes(String userId) =>
       _userDoc(userId).collection('routes');
@@ -175,15 +189,13 @@ class UserRepository {
 
   // 휴지통에 있는 기록만 (버린 지 오래된 것부터가 아니라 최근에 버린 것부터)
   Stream<List<RunLog>> watchTrash(String userId) {
-    return _userDoc(userId)
-        .collection('runs')
+    return _trash(userId)
         .orderBy('deletedAt', descending: true)
-        .limit(maxStoredRuns)
+        .limit(maxTrashedRuns)
         .snapshots()
         .map(
           (query) => query.docs
               .map((doc) => RunLog.fromMap(doc.id, doc.data()))
-              .where((log) => log.isInTrash)
               .toList(),
         );
   }
@@ -203,86 +215,131 @@ class UserRepository {
 
   // 기록 하나를 목록에서 없앱니다.
   //
-  // toTrash가 true면 되살릴 수 있게 표시만 하고 남겨둡니다. false면 경로까지 바로 지웁니다.
+  // toTrash가 true면 휴지통 컬렉션으로 옮기고, false면 경로까지 바로 지웁니다.
   // 어느 쪽이든 주간/월간 요약에서는 그 자리에서 빼냅니다. "삭제하면 주간·월간 기록에서도
   // 빠집니다"라고 알려놓고 휴지통에 있는 동안 계속 세고 있으면 말이 다르기 때문입니다.
   //
   // 받은 골드와 경험치는 건드리지 않습니다. 이미 그 골드로 장비를 샀을 수 있어서,
   // 되돌리려다 골드가 마이너스가 되는 쪽이 더 이상합니다.
-  Future<void> removeRun(String userId, RunLog run, {required bool toTrash}) {
-    return _changeRun(
-      userId,
-      run,
+  Future<void> removeRun(
+    String userId,
+    RunLog run, {
+    required bool toTrash,
+  }) async {
+    final runRef = _userDoc(userId).collection('runs').doc(run.id);
+
+    await _applyStatsAndMove(
+      userId: userId,
+      run: run,
       sign: -1,
-      apply: (transaction, runRef) {
-        if (toTrash) {
-          transaction.set(runRef, {
+      // 휴지통으로 옮기려면 원본 내용을 그대로 복사해야 해서 먼저 읽습니다.
+      readRef: toTrash ? runRef : null,
+      write: (transaction, source) {
+        if (toTrash && source != null) {
+          transaction.set(_trash(userId).doc(run.id), {
+            ...source,
             'deletedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-        } else {
-          transaction.delete(runRef);
+          });
+          // 경로는 지우지 않습니다. 되살렸을 때 지도가 그대로 보여야 합니다.
+        } else if (!toTrash) {
           transaction.delete(_routes(userId).doc(run.id));
         }
+        transaction.delete(runRef);
       },
     );
   }
 
   // 휴지통에서 되살립니다. 요약에도 다시 더합니다.
-  Future<void> restoreRun(String userId, RunLog run) {
-    return _changeRun(
-      userId,
-      run,
+  Future<void> restoreRun(String userId, RunLog run) async {
+    final trashRef = _trash(userId).doc(run.id);
+
+    await _applyStatsAndMove(
+      userId: userId,
+      run: run,
       sign: 1,
-      apply: (transaction, runRef) {
-        // 값을 null로 두지 않고 필드를 아예 지웁니다.
-        // 그래야 휴지통 목록을 deletedAt 기준으로 물을 때 딸려오지 않습니다.
-        transaction.set(runRef, {
-          'deletedAt': FieldValue.delete(),
-        }, SetOptions(merge: true));
+      readRef: trashRef,
+      write: (transaction, source) {
+        if (source == null) return;
+        transaction.set(
+          _userDoc(userId).collection('runs').doc(run.id),
+          Map<String, dynamic>.from(source)..remove('deletedAt'),
+        );
+        transaction.delete(trashRef);
       },
     );
   }
 
   // 휴지통에서 완전히 지웁니다. 요약에서는 버릴 때 이미 뺐으므로 건드리지 않습니다.
   Future<void> purgeRuns(String userId, List<RunLog> runs) async {
-    if (runs.isEmpty) return;
-    final collection = _userDoc(userId).collection('runs');
+    await _purgeTrashDocs(userId, runs.map((run) => run.id).toList());
+  }
+
+  Future<void> _purgeTrashDocs(String userId, List<String> ids) async {
+    if (ids.isEmpty) return;
 
     // 한 번에 담을 수 있는 개수에 한도가 있어서 나눠서 지웁니다.
-    for (int i = 0; i < runs.length; i += 100) {
-      final chunk = runs.skip(i).take(100);
+    for (int i = 0; i < ids.length; i += 100) {
       final batch = _firestore.batch();
-      for (final run in chunk) {
-        batch.delete(collection.doc(run.id));
-        batch.delete(_routes(userId).doc(run.id));
+      for (final id in ids.skip(i).take(100)) {
+        batch.delete(_trash(userId).doc(id));
+        batch.delete(_routes(userId).doc(id));
       }
       await batch.commit();
     }
   }
 
-  // 요약에서 빼거나(-1) 더하면서(+1) 기록 문서를 손봅니다.
-  Future<void> _changeRun(
-    String userId,
-    RunLog run, {
+  // 버린 지 오래된 것과, 한도를 넘은 만큼을 정리합니다.
+  //
+  // 서버가 따로 없어서 앱이 할 일입니다. 러닝을 저장할 때와 휴지통을 열 때 부릅니다.
+  Future<void> pruneTrash(String userId) async {
+    final trash = _trash(userId);
+
+    // 1. 기한이 지난 것
+    final cutoff = DateTime.now().subtract(const Duration(days: trashKeepDays));
+    final expired = await trash
+        .where('deletedAt', isLessThan: Timestamp.fromDate(cutoff))
+        .limit(100)
+        .get(const GetOptions(source: Source.server));
+    await _purgeTrashDocs(userId, expired.docs.map((doc) => doc.id).toList());
+
+    // 2. 그러고도 한도를 넘으면 오래 버려둔 것부터
+    final int total = (await trash.count().get()).count ?? 0;
+    final int extra = total - maxTrashedRuns;
+    if (extra <= 0) return;
+
+    final oldest = await trash
+        .orderBy('deletedAt')
+        .limit(extra)
+        .get(const GetOptions(source: Source.server));
+    await _purgeTrashDocs(userId, oldest.docs.map((doc) => doc.id).toList());
+  }
+
+  // 요약에서 빼거나(-1) 더하면서(+1) 기록 문서를 옮깁니다.
+  //
+  // 트랜잭션은 읽기를 모두 끝낸 뒤에야 쓸 수 있어서, 옮길 원본을 읽는 일도 여기서 합니다.
+  Future<void> _applyStatsAndMove({
+    required String userId,
+    required RunLog run,
     required int sign,
+    required DocumentReference<Map<String, dynamic>>? readRef,
     required void Function(
       Transaction transaction,
-      DocumentReference<Map<String, dynamic>> runRef,
+      Map<String, dynamic>? source,
     )
-    apply,
+    write,
   }) async {
-    final runRef = _userDoc(userId).collection('runs').doc(run.id);
     final DateTime at = run.createdAt ?? DateTime.now();
-
     final stats = _stats(userId);
     final weekRef = stats.doc(StatsPeriod.weekKey(at));
     final monthRef = stats.doc(StatsPeriod.monthKey(at));
 
     await _firestore.runTransaction((transaction) async {
-      // 트랜잭션은 읽기를 모두 끝낸 뒤에 써야 합니다.
+      // --- 읽기 ---
+      final source = readRef == null ? null : await transaction.get(readRef);
       final weekSnapshot = await transaction.get(weekRef);
       final monthSnapshot = await transaction.get(monthRef);
 
+      // --- 쓰기 ---
       // 요약을 붙이기 전에 저장된 러닝은 요약에 들어간 적이 없습니다.
       // 없는 칸을 손대면 "-1회, -5km"짜리 칸이 새로 생겨버립니다.
       final periods = [
@@ -319,7 +376,7 @@ class UserRepository {
         );
       }
 
-      apply(transaction, runRef);
+      write(transaction, source?.data());
     });
   }
 
@@ -335,6 +392,7 @@ class UserRepository {
     await _deleteAll(_userDoc(userId).collection('runs'));
     await _deleteAll(_routes(userId));
     await _deleteAll(_stats(userId));
+    await _deleteAll(_trash(userId));
 
     await _userDoc(userId).delete();
   }
@@ -372,6 +430,7 @@ class UserRepository {
     // 정리하다 실패해도 이미 받은 보상이 사라지면 안 되기 때문입니다.
     try {
       await _pruneOldRuns(userId);
+      await pruneTrash(userId);
     } catch (error) {
       // 다음 러닝 때 다시 정리하면 됩니다.
       debugPrint('오래된 기록 정리 실패: $error');

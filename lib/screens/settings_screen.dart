@@ -256,7 +256,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             leading: const Icon(Icons.restore_from_trash_outlined),
             title: const Text('휴지통'),
             // 휴지통을 꺼도 들어갈 수 있게 둡니다. 끄기 전에 버린 것이 남아 있을 수 있어서입니다.
-            subtitle: const Text('버린 기록 되살리기 / 완전히 지우기'),
+            subtitle: Text(
+              '${UserRepository.trashKeepDays}일 동안 보관 · '
+              '최대 ${UserRepository.maxTrashedRuns}개',
+            ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.push(
               context,
