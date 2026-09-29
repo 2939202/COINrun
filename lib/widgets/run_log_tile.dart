@@ -27,11 +27,15 @@ class RunLogTile extends StatelessWidget {
   // null이면 밀어서 치우기를 쓰지 않습니다.
   final Future<void> Function(RunRemoval how)? onRemove;
 
+  // 휴지통을 쓰는 중인지. 삭제가 무엇을 뜻하는지 문구가 달라집니다.
+  final bool trashEnabled;
+
   const RunLogTile({
     super.key,
     required this.run,
     required this.onTap,
     this.onRemove,
+    this.trashEnabled = false,
   });
 
   @override
@@ -89,9 +93,10 @@ class RunLogTile extends StatelessWidget {
             ),
           ],
         ),
-        content: const Text(
+        content: Text(
           '감추기 — 목록에서만 사라집니다\n'
-          '삭제 — 주간·월간 기록에서도 빠집니다\n\n'
+          '${trashEnabled ? "삭제 — 휴지통으로 갑니다. 되살릴 수 있어요" : "삭제 — 지나온 길까지 지워집니다"}\n'
+          '삭제하면 주간·월간 기록에서도 빠집니다.\n\n'
           '골드와 경험치는 그대로 남습니다.',
         ),
         actions: [

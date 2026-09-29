@@ -59,6 +59,17 @@ void main() {
       expect(log.expEarned, 250);
     });
 
+    test('휴지통에 있는지 읽어온다', () {
+      final trashed = RunLog.fromMap('run1', {
+        'deletedAt': Timestamp.fromDate(DateTime(2026, 9, 30)),
+      });
+      expect(trashed.isInTrash, isTrue);
+      expect(trashed.deletedAt, DateTime(2026, 9, 30));
+
+      // 휴지통을 붙이기 전에 저장된 기록에는 이 값이 없습니다. 멀쩡한 기록이 맞습니다.
+      expect(RunLog.fromMap('run1', {}).isInTrash, isFalse);
+    });
+
     test('값이 빠져 있어도 앱이 죽지 않는다', () {
       final log = RunLog.fromMap('run1', {});
       expect(log.distanceMeters, 0);

@@ -13,6 +13,7 @@ UserModel _user({
 }) => UserModel(
   nickname: '테스터',
   isGuest: false,
+  trashEnabled: false,
   level: level,
   exp: 0,
   gold: gold,

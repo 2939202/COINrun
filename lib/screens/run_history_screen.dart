@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../models/run_log.dart';
+import '../models/user_model.dart';
 import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
@@ -29,6 +30,12 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
   late final Stream<List<RunLog>> _runs = UserRepository.instance
       .watchRecentRuns(widget.userId, limit: UserRepository.maxStoredRuns);
 
+  // 삭제가 휴지통으로 갈지 바로 지울지 정하는 값입니다.
+  late final Stream<UserModel?> _user = UserRepository.instance.watchUser(
+    widget.userId,
+  );
+  bool _trashEnabled = false;
+
   void _toast(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -41,11 +48,17 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
     try {
       if (how == RunRemoval.hide) {
         await UserRepository.instance.hideRun(widget.userId, run.id);
+        if (!mounted) return;
+        _toast('기록을 감췄습니다.');
       } else {
-        await UserRepository.instance.deleteRun(widget.userId, run);
+        await UserRepository.instance.removeRun(
+          widget.userId,
+          run,
+          toTrash: _trashEnabled,
+        );
+        if (!mounted) return;
+        _toast(_trashEnabled ? '휴지통으로 옮겼습니다.' : '기록을 삭제했습니다.');
       }
-      if (!mounted) return;
-      _toast(how == RunRemoval.hide ? '기록을 감췄습니다.' : '기록을 삭제했습니다.');
     } on FirebaseException catch (error) {
       // 무엇 때문에 막혔는지 남깁니다.
       // 예전에는 이유를 통째로 버려서 "처리하지 못했습니다"만 반복됐습니다.
@@ -65,47 +78,58 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('전체 기록')),
-      body: StreamBuilder<List<RunLog>>(
-        stream: _runs,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final List<RunLog> runs = snapshot.data ?? [];
-          if (runs.isEmpty) return const _Empty();
-
-          return ListView(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            children: [
-              _Totals(runs: runs),
-              const SizedBox(height: AppSpacing.lg),
-              const Divider(),
-              for (final run in runs) ...[
-                RunLogTile(
-                  run: run,
-                  onRemove: (how) => _remove(run, how),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          RunDetailScreen(userId: widget.userId, run: run),
-                    ),
-                  ),
-                ),
-                if (run != runs.last) const Divider(),
-              ],
-              const SizedBox(height: AppSpacing.lg),
-              Text(
-                '기록은 최근 ${UserRepository.maxStoredRuns}개까지 보관합니다.',
-                style: Theme.of(
-                  context,
-                ).textTheme.labelMedium?.copyWith(color: AppColors.grey500),
-              ),
-            ],
-          );
+      body: StreamBuilder<UserModel?>(
+        stream: _user,
+        builder: (context, userSnapshot) {
+          _trashEnabled = userSnapshot.data?.trashEnabled ?? false;
+          return _buildList();
         },
       ),
+    );
+  }
+
+  Widget _buildList() {
+    return StreamBuilder<List<RunLog>>(
+      stream: _runs,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final List<RunLog> runs = snapshot.data ?? [];
+        if (runs.isEmpty) return const _Empty();
+
+        return ListView(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          children: [
+            _Totals(runs: runs),
+            const SizedBox(height: AppSpacing.lg),
+            const Divider(),
+            for (final run in runs) ...[
+              RunLogTile(
+                run: run,
+                trashEnabled: _trashEnabled,
+                onRemove: (how) => _remove(run, how),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        RunDetailScreen(userId: widget.userId, run: run),
+                  ),
+                ),
+              ),
+              if (run != runs.last) const Divider(),
+            ],
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              '기록은 최근 ${UserRepository.maxStoredRuns}개까지 보관합니다.',
+              style: Theme.of(
+                context,
+              ).textTheme.labelMedium?.copyWith(color: AppColors.grey500),
+            ),
+          ],
+        );
+      },
     );
   }
 }

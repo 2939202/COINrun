@@ -123,6 +123,18 @@ void main() {
     });
   });
 
+  group('휴지통 설정', () {
+    test('기본은 꺼짐', () {
+      expect(UserModel.initial('러너1호', isGuest: false).trashEnabled, isFalse);
+      // 휴지통을 붙이기 전에 만든 문서도 꺼짐으로 읽힙니다.
+      expect(UserModel.fromMap({'nickname': '옛유저'}).trashEnabled, isFalse);
+    });
+
+    test('켜둔 값을 그대로 읽어온다', () {
+      expect(UserModel.fromMap({'trashEnabled': true}).trashEnabled, isTrue);
+    });
+  });
+
   group('랭킹을 붙이기 전 계정', () {
     // totalExp 필드가 없던 시절 문서도 순위에 끼워줘야 합니다.
     test('totalExp가 없으면 레벨과 경험치로 되짚어 구한다', () {

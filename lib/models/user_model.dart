@@ -10,6 +10,11 @@ class UserModel {
   // 랭킹에 남겨두면 주인 없는 줄이 계속 쌓입니다.
   // 나중에 이메일을 붙이면 false가 되고 그때부터 랭킹에 들어갑니다.
   final bool isGuest;
+
+  // 휴지통을 쓰는지. 기본은 꺼짐입니다.
+  //   꺼짐 - 삭제하면 바로 사라집니다.
+  //   켜짐 - 삭제하면 휴지통으로 가고, 거기서 되살리거나 완전히 지울 수 있습니다.
+  final bool trashEnabled;
   final int level;
   final int exp; // 현재 레벨에서 쌓인 경험치 (레벨업하면 초과분만 남음)
   final int gold;
@@ -27,6 +32,7 @@ class UserModel {
   const UserModel({
     required this.nickname,
     required this.isGuest,
+    required this.trashEnabled,
     required this.level,
     required this.exp,
     required this.gold,
@@ -44,6 +50,7 @@ class UserModel {
     return UserModel(
       nickname: nickname,
       isGuest: isGuest,
+      trashEnabled: false,
       level: 1,
       exp: 0,
       gold: 0,
@@ -66,6 +73,7 @@ class UserModel {
       // 이 값이 없던 시절 문서는 이메일 계정으로 봅니다. 그때는 게스트도 랭킹에 있었고,
       // 지우면 기존 사용자가 랭킹에서 사라져 버리기 때문입니다.
       isGuest: map['isGuest'] as bool? ?? false,
+      trashEnabled: map['trashEnabled'] as bool? ?? false,
       level: (map['level'] as num?)?.toInt() ?? 1,
       exp: (map['exp'] as num?)?.toInt() ?? 0,
       gold: (map['gold'] as num?)?.toInt() ?? 0,
@@ -92,6 +100,7 @@ class UserModel {
     return {
       'nickname': nickname,
       'isGuest': isGuest,
+      'trashEnabled': trashEnabled,
       'level': level,
       'exp': exp,
       'gold': gold,

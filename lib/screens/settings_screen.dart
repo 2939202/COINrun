@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
+import 'trash_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final String userId;
@@ -223,6 +224,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('회원 탈퇴', style: TextStyle(color: Colors.red)),
             subtitle: const Text('계정과 기록을 모두 지웁니다'),
             onTap: _deleteAccount,
+          ),
+          const Divider(),
+
+          // ------------------------------------------------------------
+          // 기록 관리
+          // ------------------------------------------------------------
+          const _SectionHeader(title: '기록'),
+          StreamBuilder<UserModel?>(
+            stream: _userStream,
+            builder: (context, snapshot) {
+              final UserModel? user = snapshot.data;
+              final bool enabled = user?.trashEnabled ?? false;
+              return SwitchListTile(
+                secondary: const Icon(Icons.delete_outline),
+                title: const Text('휴지통 사용'),
+                subtitle: Text(
+                  enabled ? '삭제한 기록이 휴지통으로 가서 되살릴 수 있어요.' : '삭제하면 바로 지워집니다.',
+                ),
+                value: enabled,
+                onChanged: user == null
+                    ? null
+                    : (value) => UserRepository.instance.setTrashEnabled(
+                        widget.userId,
+                        value,
+                      ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.restore_from_trash_outlined),
+            title: const Text('휴지통'),
+            // 휴지통을 꺼도 들어갈 수 있게 둡니다. 끄기 전에 버린 것이 남아 있을 수 있어서입니다.
+            subtitle: const Text('버린 기록 되살리기 / 완전히 지우기'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => TrashScreen(userId: widget.userId),
+              ),
+            ),
           ),
           const Divider(),
 

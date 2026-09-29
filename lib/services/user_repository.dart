@@ -94,7 +94,7 @@ class UserRepository {
               // 질의로 거르지 않고 여기서 거르는 이유: Firestore에서 "hidden이 true가
               // 아닌 것"을 물으면 hidden 필드가 아예 없는 옛 기록까지 빠져버립니다.
               // 어차피 60개 안쪽이라 받아와서 거르는 편이 안전합니다.
-              .where((log) => !log.hidden)
+              .where((log) => !log.hidden && !log.isInTrash)
               .toList(),
         );
   }
@@ -173,6 +173,27 @@ class UserRepository {
     }
   }
 
+  // 휴지통에 있는 기록만 (버린 지 오래된 것부터가 아니라 최근에 버린 것부터)
+  Stream<List<RunLog>> watchTrash(String userId) {
+    return _userDoc(userId)
+        .collection('runs')
+        .orderBy('deletedAt', descending: true)
+        .limit(maxStoredRuns)
+        .snapshots()
+        .map(
+          (query) => query.docs
+              .map((doc) => RunLog.fromMap(doc.id, doc.data()))
+              .where((log) => log.isInTrash)
+              .toList(),
+        );
+  }
+
+  Future<void> setTrashEnabled(String userId, bool enabled) {
+    return _userDoc(
+      userId,
+    ).set({'trashEnabled': enabled}, SetOptions(merge: true));
+  }
+
   // 목록에서만 감춥니다. 통계와 보상은 그대로 둡니다.
   Future<void> hideRun(String userId, String runId) {
     return _userDoc(userId).collection('runs').doc(runId).set({
@@ -180,12 +201,76 @@ class UserRepository {
     }, SetOptions(merge: true));
   }
 
-  // 기록을 정말로 지웁니다. 경로도 지우고, 주간/월간 요약에서도 빼냅니다.
+  // 기록 하나를 목록에서 없앱니다.
   //
-  // 받은 골드와 경험치, 누적 거리는 건드리지 않습니다. 이미 그 골드로 장비를 샀을 수
-  // 있어서, 되돌리려다 골드가 마이너스가 되는 쪽이 더 이상합니다.
-  // 지우는 쓰임새가 "실수로 시작을 눌러 생긴 0km 기록"이라 회수할 것도 거의 없습니다.
-  Future<void> deleteRun(String userId, RunLog run) async {
+  // toTrash가 true면 되살릴 수 있게 표시만 하고 남겨둡니다. false면 경로까지 바로 지웁니다.
+  // 어느 쪽이든 주간/월간 요약에서는 그 자리에서 빼냅니다. "삭제하면 주간·월간 기록에서도
+  // 빠집니다"라고 알려놓고 휴지통에 있는 동안 계속 세고 있으면 말이 다르기 때문입니다.
+  //
+  // 받은 골드와 경험치는 건드리지 않습니다. 이미 그 골드로 장비를 샀을 수 있어서,
+  // 되돌리려다 골드가 마이너스가 되는 쪽이 더 이상합니다.
+  Future<void> removeRun(String userId, RunLog run, {required bool toTrash}) {
+    return _changeRun(
+      userId,
+      run,
+      sign: -1,
+      apply: (transaction, runRef) {
+        if (toTrash) {
+          transaction.set(runRef, {
+            'deletedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        } else {
+          transaction.delete(runRef);
+          transaction.delete(_routes(userId).doc(run.id));
+        }
+      },
+    );
+  }
+
+  // 휴지통에서 되살립니다. 요약에도 다시 더합니다.
+  Future<void> restoreRun(String userId, RunLog run) {
+    return _changeRun(
+      userId,
+      run,
+      sign: 1,
+      apply: (transaction, runRef) {
+        // 값을 null로 두지 않고 필드를 아예 지웁니다.
+        // 그래야 휴지통 목록을 deletedAt 기준으로 물을 때 딸려오지 않습니다.
+        transaction.set(runRef, {
+          'deletedAt': FieldValue.delete(),
+        }, SetOptions(merge: true));
+      },
+    );
+  }
+
+  // 휴지통에서 완전히 지웁니다. 요약에서는 버릴 때 이미 뺐으므로 건드리지 않습니다.
+  Future<void> purgeRuns(String userId, List<RunLog> runs) async {
+    if (runs.isEmpty) return;
+    final collection = _userDoc(userId).collection('runs');
+
+    // 한 번에 담을 수 있는 개수에 한도가 있어서 나눠서 지웁니다.
+    for (int i = 0; i < runs.length; i += 100) {
+      final chunk = runs.skip(i).take(100);
+      final batch = _firestore.batch();
+      for (final run in chunk) {
+        batch.delete(collection.doc(run.id));
+        batch.delete(_routes(userId).doc(run.id));
+      }
+      await batch.commit();
+    }
+  }
+
+  // 요약에서 빼거나(-1) 더하면서(+1) 기록 문서를 손봅니다.
+  Future<void> _changeRun(
+    String userId,
+    RunLog run, {
+    required int sign,
+    required void Function(
+      Transaction transaction,
+      DocumentReference<Map<String, dynamic>> runRef,
+    )
+    apply,
+  }) async {
     final runRef = _userDoc(userId).collection('runs').doc(run.id);
     final DateTime at = run.createdAt ?? DateTime.now();
 
@@ -199,7 +284,7 @@ class UserRepository {
       final monthSnapshot = await transaction.get(monthRef);
 
       // 요약을 붙이기 전에 저장된 러닝은 요약에 들어간 적이 없습니다.
-      // 없는 칸에 빼기를 하면 "-1회, -5km"짜리 칸이 새로 생겨버립니다.
+      // 없는 칸을 손대면 "-1회, -5km"짜리 칸이 새로 생겨버립니다.
       final periods = [
         (
           ref: weekRef,
@@ -228,14 +313,13 @@ class UserRepository {
             steps: run.steps,
             gold: run.goldEarned,
             exp: run.expEarned,
-            sign: -1,
+            sign: sign,
           ),
           SetOptions(merge: true),
         );
       }
 
-      transaction.delete(runRef);
-      transaction.delete(_routes(userId).doc(run.id));
+      apply(transaction, runRef);
     });
   }
 
