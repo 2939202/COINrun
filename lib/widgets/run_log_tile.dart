@@ -71,7 +71,24 @@ class RunLogTile extends StatelessWidget {
     return showDialog<RunRemoval>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('이 기록을 치울까요?'),
+        // 닫기는 오른쪽 위 X로 뺐습니다. 아래에는 고를 것만 남깁니다.
+        titlePadding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.sm,
+          AppSpacing.sm,
+          0,
+        ),
+        title: Row(
+          children: [
+            const Expanded(child: Text('이 기록을 치울까요?')),
+            IconButton(
+              tooltip: '닫기',
+              icon: const Icon(Icons.close),
+              visualDensity: VisualDensity.compact,
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
         content: const Text(
           '감추면 목록에서만 사라지고, 주간·월간 기록에는 그대로 남습니다.\n\n'
           '삭제하면 지나온 길까지 지워지고 주간·월간 기록에서도 빠집니다. '
@@ -79,10 +96,6 @@ class RunLogTile extends StatelessWidget {
           '이미 받은 골드와 경험치는 어느 쪽이든 그대로 남습니다.',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
-          ),
           TextButton(
             onPressed: () => Navigator.pop(context, RunRemoval.delete),
             child: const Text('삭제', style: TextStyle(color: Colors.red)),
