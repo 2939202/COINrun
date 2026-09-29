@@ -4,10 +4,12 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import '../game/equipment_catalog.dart';
 import '../game/equipment_rules.dart';
 import '../game/route_simplifier.dart';
+import '../game/stats_period.dart';
 import '../game/run_rules.dart';
 import '../models/equipment_set.dart';
 import '../models/run_log.dart';
 import '../models/run_route.dart';
+import '../models/run_stats.dart';
 import '../models/run_record.dart';
 import '../models/user_model.dart';
 import 'ranking_repository.dart';
@@ -45,6 +47,27 @@ class UserRepository {
     );
   }
 
+  CollectionReference<Map<String, dynamic>> _stats(String userId) =>
+      _userDoc(userId).collection('stats');
+
+  // 주간/월간 요약을 최근 것부터 읽습니다. (화면은 나중에 만듭니다)
+  Stream<List<RunStats>> watchStats(
+    String userId, {
+    required bool weekly,
+    int limit = 12,
+  }) {
+    return _stats(userId)
+        .where('isWeek', isEqualTo: weekly)
+        .orderBy('startAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map(
+          (query) => query.docs
+              .map((doc) => RunStats.fromMap(doc.id, doc.data()))
+              .toList(),
+        );
+  }
+
   CollectionReference<Map<String, dynamic>> _routes(String userId) =>
       _userDoc(userId).collection('routes');
 
@@ -66,6 +89,12 @@ class UserRepository {
         .map(
           (query) => query.docs
               .map((doc) => RunLog.fromMap(doc.id, doc.data()))
+              // 감춘 기록은 목록에서 뺍니다.
+              //
+              // 질의로 거르지 않고 여기서 거르는 이유: Firestore에서 "hidden이 true가
+              // 아닌 것"을 물으면 hidden 필드가 아예 없는 옛 기록까지 빠져버립니다.
+              // 어차피 60개 안쪽이라 받아와서 거르는 편이 안전합니다.
+              .where((log) => !log.hidden)
               .toList(),
         );
   }
@@ -103,6 +132,83 @@ class UserRepository {
     }
   }
 
+  // 주간/월간 요약 칸에 더하거나(sign 1) 뺍니다(sign -1).
+  void _applyStats({
+    required Transaction transaction,
+    required String userId,
+    required DateTime at,
+    required double distanceMeters,
+    required int seconds,
+    required int movingSeconds,
+    required int steps,
+    required int gold,
+    required int exp,
+    int sign = 1,
+  }) {
+    final stats = _stats(userId);
+    final periods = <String, ({DateTime start, bool isWeek})>{
+      StatsPeriod.weekKey(at): (start: StatsPeriod.weekStart(at), isWeek: true),
+      StatsPeriod.monthKey(at): (
+        start: StatsPeriod.monthStart(at),
+        isWeek: false,
+      ),
+    };
+
+    for (final entry in periods.entries) {
+      transaction.set(
+        stats.doc(entry.key),
+        RunStats.changes(
+          startAt: entry.value.start,
+          isWeek: entry.value.isWeek,
+          distanceMeters: distanceMeters,
+          seconds: seconds,
+          movingSeconds: movingSeconds,
+          steps: steps,
+          gold: gold,
+          exp: exp,
+          sign: sign,
+        ),
+        SetOptions(merge: true),
+      );
+    }
+  }
+
+  // 목록에서만 감춥니다. 통계와 보상은 그대로 둡니다.
+  Future<void> hideRun(String userId, String runId) {
+    return _userDoc(userId).collection('runs').doc(runId).set({
+      'hidden': true,
+    }, SetOptions(merge: true));
+  }
+
+  // 기록을 정말로 지웁니다. 경로도 지우고, 주간/월간 요약에서도 빼냅니다.
+  //
+  // 받은 골드와 경험치, 누적 거리는 건드리지 않습니다. 이미 그 골드로 장비를 샀을 수
+  // 있어서, 되돌리려다 골드가 마이너스가 되는 쪽이 더 이상합니다.
+  // 지우는 쓰임새가 "실수로 시작을 눌러 생긴 0km 기록"이라 회수할 것도 거의 없습니다.
+  Future<void> deleteRun(String userId, RunLog run) async {
+    final runRef = _userDoc(userId).collection('runs').doc(run.id);
+    final DateTime at = run.createdAt ?? DateTime.now();
+
+    await _firestore.runTransaction((transaction) async {
+      // 요약에서 이 러닝의 몫을 빼냅니다.
+      _applyStats(
+        transaction: transaction,
+        userId: userId,
+        at: at,
+        distanceMeters: run.distanceMeters,
+        seconds: run.durationSeconds,
+        movingSeconds: run.movingSeconds,
+        steps: run.steps,
+        gold: run.goldEarned,
+        exp: run.expEarned,
+        sign: -1,
+      );
+
+      transaction.delete(runRef);
+      transaction.delete(_routes(userId).doc(run.id));
+    });
+  }
+
   // 회원 탈퇴 - 이 계정이 만든 것을 전부 지웁니다.
   //
   // 지우는 순서가 중요합니다. 랭킹 줄을 먼저 지워야, 중간에 실패해도
@@ -114,6 +220,7 @@ class UserRepository {
     // (한 번에 지울 수 있는 개수에 한도가 있습니다)
     await _deleteAll(_userDoc(userId).collection('runs'));
     await _deleteAll(_routes(userId));
+    await _deleteAll(_stats(userId));
 
     await _userDoc(userId).delete();
   }
@@ -250,8 +357,25 @@ class UserRepository {
         'goldEarned': gold,
         'expEarned': exp,
         'gearSetId': gear?.id, // 어떤 장비를 입고 뛰었는지 (나중에 기록 화면에서 사용)
+        'hidden': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
+
+      // 이번 주 칸과 이번 달 칸에 더해둡니다.
+      //
+      // 여기서 더해두면 나중에 "이번 주 얼마나 뛰었지"를 볼 때 러닝 기록을 뒤지지 않고
+      // 문서 하나만 읽으면 됩니다. 상세 기록이 60개를 넘어 밀려나도 이 숫자는 남습니다.
+      _applyStats(
+        transaction: transaction,
+        userId: userId,
+        at: DateTime.now(),
+        distanceMeters: run.distanceMeters,
+        seconds: run.elapsed.inSeconds,
+        movingSeconds: run.movingTime.inSeconds,
+        steps: run.steps,
+        gold: gold,
+        exp: exp,
+      );
 
       return RunReward(
         gold: gold,

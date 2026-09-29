@@ -28,6 +28,28 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
   late final Stream<List<RunLog>> _runs = UserRepository.instance
       .watchRecentRuns(widget.userId, limit: UserRepository.maxStoredRuns);
 
+  // 밀어서 치우기. 감추기는 목록에서만, 삭제는 통계에서도 빼냅니다.
+  Future<void> _remove(RunLog run, RunRemoval how) async {
+    try {
+      if (how == RunRemoval.hide) {
+        await UserRepository.instance.hideRun(widget.userId, run.id);
+      } else {
+        await UserRepository.instance.deleteRun(widget.userId, run);
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(how == RunRemoval.hide ? '기록을 감췄습니다.' : '기록을 삭제했습니다.'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('처리하지 못했습니다. 잠시 후 다시 해주세요.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -51,6 +73,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
               for (final run in runs) ...[
                 RunLogTile(
                   run: run,
+                  onRemove: (how) => _remove(run, how),
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(

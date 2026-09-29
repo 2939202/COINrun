@@ -38,6 +38,27 @@ void main() {
       expect(log.legacyRoute.points.length, 2);
     });
 
+    test('감춘 기록인지 읽어온다', () {
+      expect(RunLog.fromMap('run1', {'hidden': true}).hidden, isTrue);
+      // 감추기를 붙이기 전에 저장된 기록에는 이 값이 없습니다. 보이는 것이 맞습니다.
+      expect(RunLog.fromMap('run1', {}).hidden, isFalse);
+    });
+
+    // 기록을 지울 때 주간/월간 요약에서 같은 만큼 빼야 해서, 이 값들이 필요합니다.
+    test('요약에서 빼낼 때 쓰는 값들을 읽어온다', () {
+      final log = RunLog.fromMap('run1', {
+        'distanceMeters': 5000.0,
+        'durationSeconds': 1800,
+        'movingSeconds': 1500,
+        'steps': 6000,
+        'goldEarned': 600,
+        'expEarned': 250,
+      });
+      expect(log.movingSeconds, 1500);
+      expect(log.steps, 6000);
+      expect(log.expEarned, 250);
+    });
+
     test('값이 빠져 있어도 앱이 죽지 않는다', () {
       final log = RunLog.fromMap('run1', {});
       expect(log.distanceMeters, 0);
