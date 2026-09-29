@@ -67,7 +67,7 @@ class _PermissionScreenState extends State<PermissionScreen> {
               const SizedBox(height: AppSpacing.md),
               Text(
                 '달린 만큼 기록하려면 세 가지가 필요해요.',
-                style: textTheme.bodyLarge?.copyWith(color: AppColors.grey500),
+                style: textTheme.bodyLarge?.copyWith(color: AppColors.mute),
               ),
               const SizedBox(height: AppSpacing.xl),
 
@@ -163,7 +163,7 @@ class _Item extends StatelessWidget {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.volt,
+                          color: AppColors.accent,
                           borderRadius: BorderRadius.circular(AppRadius.pill),
                         ),
                         child: Text('필수', style: textTheme.labelMedium),

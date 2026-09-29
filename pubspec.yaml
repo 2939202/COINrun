@@ -44,4 +44,5 @@ dev_dependencies:
 flutter:
   assets:
     - assets/models/ # 캐릭터 3D 모델
+    - assets/character/ # 캐릭터 2D 이미지
   uses-material-design: true

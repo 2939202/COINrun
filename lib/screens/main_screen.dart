@@ -8,9 +8,9 @@ import '../models/user_model.dart';
 import '../services/ranking_repository.dart';
 import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
-import '../utils/formatters.dart';
 import '../widgets/run_log_tile.dart';
-import '../widgets/stat_block.dart';
+import '../widgets/runner_figure.dart';
+import '../widgets/week_summary.dart';
 import 'profile_screen.dart'; //프로필
 import 'ranking_screen.dart'; //랭킹
 import 'run_history_screen.dart'; //전체 기록
@@ -20,7 +20,7 @@ import 'settings_screen.dart'; //설정
 
 // ============================================================
 // 홈 화면
-//   인사 + 골드/설정 -> 레벨 카드 -> 누적 기록 -> 캐릭터/랭킹 -> 최근 러닝
+//   인사 + 골드/설정 -> 이번 주 -> 캐릭터(레벨/랭킹) -> 최근 러닝
 //   화면 맨 아래에는 "러닝 시작" 버튼이 항상 고정되어 있습니다.
 // ============================================================
 class MainScreen extends StatefulWidget {
@@ -78,11 +78,17 @@ class _MainScreenState extends State<MainScreen> {
               children: [
                 _buildHeader(user),
                 const SizedBox(height: AppSpacing.lg),
-                _LevelCard(user: user),
+                // 이번 주가 맨 위. 누적 총계보다 훨씬 자주 궁금한 숫자입니다.
+                WeekSummary(userId: _userId),
                 const SizedBox(height: AppSpacing.xl),
-                _buildTotals(user),
-                const SizedBox(height: AppSpacing.xl),
-                _buildShortcuts(user),
+                // 캐릭터가 이 앱의 주인공입니다. 레벨과 랭킹을 여기에 붙여둡니다.
+                _CharacterBlock(
+                  user: user,
+                  onTapCharacter: () =>
+                      _open(ProfileScreen(userId: _userId, userData: user)),
+                  onTapRanking: () =>
+                      _open(RankingScreen(userId: _userId, user: user)),
+                ),
                 const SizedBox(height: AppSpacing.xl),
                 _buildRecentRuns(),
               ],
@@ -122,48 +128,6 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   // 누적 기록 - 박스 없이 큰 숫자만 (나이키 런 스타일)
-  Widget _buildTotals(UserModel user) {
-    return Row(
-      children: [
-        StatBlock(
-          value: formatKm(user.totalDistance),
-          label: '총 킬로미터',
-          alignment: CrossAxisAlignment.start,
-        ),
-        StatBlock(
-          value: formatHoursMinutes(user.totalRunSeconds),
-          label: '총 시간',
-          alignment: CrossAxisAlignment.start,
-        ),
-        _RankStat(user: user),
-      ],
-    );
-  }
-
-  Widget _buildShortcuts(UserModel user) {
-    return Row(
-      children: [
-        Expanded(
-          child: _ShortcutCard(
-            icon: Icons.shield_outlined,
-            title: '내 캐릭터',
-            subtitle: EquipmentRules.equippedSetName(user),
-            onTap: () => _open(ProfileScreen(userId: _userId, userData: user)),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
-          child: _ShortcutCard(
-            icon: Icons.emoji_events_outlined,
-            title: '랭킹',
-            subtitle: '전체 순위 보기',
-            onTap: () => _open(RankingScreen(userId: _userId, user: user)),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildRecentRuns() {
     final textTheme = Theme.of(context).textTheme;
     return Column(
@@ -189,9 +153,7 @@ class _MainScreenState extends State<MainScreen> {
                 padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
                 child: Text(
                   '아직 러닝 기록이 없어요.\n첫 러닝을 시작해서 골드와 경험치를 모아보세요.',
-                  style: textTheme.bodyMedium?.copyWith(
-                    color: AppColors.grey500,
-                  ),
+                  style: textTheme.bodyMedium?.copyWith(color: AppColors.mute),
                 ),
               );
             }
@@ -228,7 +190,7 @@ class _MainScreenState extends State<MainScreen> {
           icon: const Icon(Icons.play_arrow_rounded, size: 32),
           label: const Text('러닝 시작'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.volt,
+            backgroundColor: AppColors.accent,
             foregroundColor: AppColors.black,
             textStyle: const TextStyle(
               fontSize: 20,
@@ -245,20 +207,127 @@ class _MainScreenState extends State<MainScreen> {
 // 홈 화면 전용 작은 위젯들
 // ------------------------------------------------------------
 
-// 홈의 "순위" 칸
+// 홈의 주인공. 캐릭터 + 레벨 + 랭킹을 한 덩어리로 묶습니다.
 //
-// 순위는 남들과 비교해야 알 수 있어서 유저 문서에는 없습니다.
-// 화면에 들어올 때 한 번만 물어봅니다. (Firestore의 count 집계라 문서를 받아오지 않습니다)
-class _RankStat extends StatefulWidget {
+// 예전에는 검은 레벨 카드와 캐릭터 카드가 따로 떨어져 있었습니다. 둘은 결국 같은 얘기라
+// 자리를 두 배로 쓰면서, 정작 캐릭터는 어깨까지 잘린 썸네일로 들어가 있었습니다.
+class _CharacterBlock extends StatelessWidget {
   final UserModel user;
+  final VoidCallback onTapCharacter;
+  final VoidCallback onTapRanking;
 
-  const _RankStat({required this.user});
+  const _CharacterBlock({
+    required this.user,
+    required this.onTapCharacter,
+    required this.onTapRanking,
+  });
 
   @override
-  State<_RankStat> createState() => _RankStatState();
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final int needed = RunRules.expToNextLevel(user.level);
+    final double progress = (user.exp / needed).clamp(0.0, 1.0);
+
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: onTapCharacter,
+          child: SizedBox(
+            height: 230,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                const RunnerFigure(),
+                // 입은 장비를 캐릭터 옆에 작게 얹습니다.
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  child: _Tag(text: EquipmentRules.equippedSetName(user)),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('Lv.${user.level}', style: textTheme.titleLarge),
+            Text(
+              '  ·  ${RunRules.tierName(user.level)}',
+              style: textTheme.titleMedium?.copyWith(color: AppColors.accent),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 8,
+            color: AppColors.black,
+            backgroundColor: AppColors.sand,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Row(
+          children: [
+            Text('${user.exp} / $needed EXP', style: textTheme.labelMedium),
+            const Spacer(),
+            Text('다음 레벨까지 ${needed - user.exp}', style: textTheme.labelMedium),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+
+        // 랭킹은 여기로 내렸습니다. 보고 싶은 사람만 누릅니다.
+        // 편차가 큰 운동에서 절대 순위를 홈에 크게 걸어두면 대부분에게는 꺾이는 숫자입니다.
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: onTapRanking,
+            child: _RankLabel(user: user),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
-class _RankStatState extends State<_RankStat> {
+class _Tag extends StatelessWidget {
+  final String text;
+
+  const _Tag({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm + 2,
+        vertical: AppSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.cream,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(color: AppColors.sand),
+      ),
+      child: Text(text, style: Theme.of(context).textTheme.labelMedium),
+    );
+  }
+}
+
+// 랭킹 버튼 안의 글자. 순위를 알아낸 뒤에는 "랭킹 · 거리 4위"로 바뀝니다.
+class _RankLabel extends StatefulWidget {
+  final UserModel user;
+
+  const _RankLabel({required this.user});
+
+  @override
+  State<_RankLabel> createState() => _RankLabelState();
+}
+
+class _RankLabelState extends State<_RankLabel> {
   late final Future<int?> _rank = RankingRepository.instance.myRank(
     RankingKind.distance,
     widget.user,
@@ -270,95 +339,8 @@ class _RankStatState extends State<_RankStat> {
       future: _rank,
       builder: (context, snapshot) {
         final int? rank = snapshot.data;
-        return StatBlock(
-          value: rank == null ? '-' : '$rank위',
-          label: '거리 순위',
-          alignment: CrossAxisAlignment.start,
-        );
+        return Text(rank == null ? '랭킹 보기' : '랭킹  ·  거리 $rank위');
       },
-    );
-  }
-}
-
-// 검은 레벨 카드: 큰 레벨 숫자 + 등급 + 경험치 바
-class _LevelCard extends StatelessWidget {
-  final UserModel user;
-
-  const _LevelCard({required this.user});
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final int needed = RunRules.expToNextLevel(user.level);
-
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: AppColors.black,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'LEVEL',
-                style: textTheme.labelMedium?.copyWith(letterSpacing: 2),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.sm + 2,
-                  vertical: AppSpacing.xs,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.volt,
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                ),
-                child: Text(
-                  RunRules.tierName(user.level),
-                  style: textTheme.labelMedium?.copyWith(
-                    color: AppColors.black,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          Text(
-            '${user.level}',
-            style: textTheme.displayLarge?.copyWith(
-              color: AppColors.white,
-              fontSize: 96,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            child: LinearProgressIndicator(
-              value: user.exp / needed,
-              minHeight: 8,
-              color: AppColors.volt,
-              backgroundColor: AppColors.grey700,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              Text(
-                '${user.exp} / $needed EXP',
-                style: textTheme.labelMedium?.copyWith(color: AppColors.white),
-              ),
-              const Spacer(),
-              Text(
-                '다음 레벨까지 ${needed - user.exp}',
-                style: textTheme.labelMedium,
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }
@@ -376,7 +358,7 @@ class _GoldPill extends StatelessWidget {
         vertical: AppSpacing.sm - 2,
       ),
       decoration: BoxDecoration(
-        color: AppColors.grey100,
+        color: AppColors.cream,
         borderRadius: BorderRadius.circular(AppRadius.pill),
       ),
       child: Row(
@@ -391,59 +373,6 @@ class _GoldPill extends StatelessWidget {
             ).textTheme.labelLarge?.copyWith(fontSize: 14),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// 회색 정사각형 바로가기 카드
-class _ShortcutCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  const _ShortcutCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: SizedBox(
-          height: 150,
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(icon, size: 28),
-                    const Spacer(),
-                    const Icon(Icons.arrow_outward, size: 18),
-                  ],
-                ),
-                const Spacer(),
-                Text(title, style: textTheme.titleLarge),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  subtitle,
-                  style: textTheme.labelMedium,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

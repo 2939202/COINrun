@@ -116,7 +116,7 @@ class _RunDetailScreenState extends State<RunDetailScreen> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Container(
-            color: AppColors.grey100,
+            color: AppColors.cream,
             alignment: Alignment.center,
             child: const CircularProgressIndicator(),
           );

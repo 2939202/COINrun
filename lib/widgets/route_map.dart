@@ -57,7 +57,7 @@ class RouteMap extends StatelessWidget {
                 points: segment,
                 strokeWidth: 3,
                 // 지도 도로선과 섞이지 않도록 형광색에 검은 테두리를 둘러 그립니다.
-                color: AppColors.volt,
+                color: AppColors.accent,
                 borderStrokeWidth: 1.5,
                 borderColor: AppColors.black,
               ),
@@ -75,7 +75,7 @@ class RouteMap extends StatelessWidget {
               point: points.last,
               width: 18,
               height: 18,
-              child: const _EndDot(color: AppColors.volt, label: '도착'),
+              child: const _EndDot(color: AppColors.accent, label: '도착'),
             ),
           ],
         ),
@@ -91,7 +91,7 @@ class _NoRoute extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppColors.grey100,
+      color: AppColors.cream,
       alignment: Alignment.center,
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Text(
@@ -99,7 +99,7 @@ class _NoRoute extends StatelessWidget {
         textAlign: TextAlign.center,
         style: Theme.of(
           context,
-        ).textTheme.labelMedium?.copyWith(color: AppColors.grey500),
+        ).textTheme.labelMedium?.copyWith(color: AppColors.mute),
       ),
     );
   }

@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
 // ============================================================
-// 앱 전체 디자인 기준 (나이키 런 스타일: 흑백 + 포인트 색 하나)
+// 앱 전체 디자인 기준
+//
+// 잉크 블랙 + 크림 + 갈색. 종이에 먹으로 찍어낸 느낌을 노립니다.
+// 러닝 앱이 죄다 어두운 배경에 형광색이라, 밝은 종이색으로 가면 확실히 달라 보입니다.
+//
 // 화면에서는 Color(0x...)나 fontSize를 직접 쓰지 말고 여기 값을 가져다 씁니다.
 // ============================================================
 
@@ -9,14 +13,22 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  static const Color black = Color(0xFF111111);
+  // 글자와 검은 카드. 순검정(#000)이 아니라 살짝 따뜻한 먹색입니다.
+  static const Color black = Color(0xFF1B1714);
+  static const Color inkSoft = Color(0xFF3A332D); // 검은 카드 위의 보조 요소
+
   static const Color white = Color(0xFFFFFFFF);
-  static const Color volt = Color(0xFFD4FF3A); // 포인트 색 - 강조할 곳에만 아껴서 사용
-  static const Color grey100 = Color(0xFFF5F5F5); // 카드 배경
-  static const Color grey300 = Color(0xFFE5E5E5); // 구분선, 테두리
-  static const Color grey500 = Color(0xFF8D8D8D); // 보조 글자
-  static const Color grey700 = Color(0xFF4B4B4B);
-  static const Color error = Color(0xFFD43F21);
+
+  // 포인트 색. 아껴서 씁니다. (레벨업, 지도 경로, 내 순위 강조)
+  static const Color accent = Color(0xFF8A6A3E);
+
+  static const Color cream = Color(0xFFF5EDE0); // 카드 배경
+  static const Color creamDeep = Color(0xFFF1E8D7); // 캐릭터/잡화점 같은 화면 배경
+  static const Color sand = Color(0xFFDBD6C0); // 구분선, 진행바 바닥
+  static const Color mute = Color(0xFF8B8175); // 보조 글자
+  static const Color gold = Color(0xFFC08A2E); // 골드 숫자
+
+  static const Color error = Color(0xFFB4442A);
 }
 
 // 간격 (여백은 이 값들 중에서만 고릅니다)
@@ -63,7 +75,7 @@ class AppTheme {
     labelMedium: TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w600,
-      color: AppColors.grey500,
+      color: AppColors.mute,
       letterSpacing: 0.5,
     ), // 숫자 아래 작은 설명
   );
@@ -72,13 +84,13 @@ class AppTheme {
     const colorScheme = ColorScheme.light(
       primary: AppColors.black,
       onPrimary: AppColors.white,
-      secondary: AppColors.volt,
-      onSecondary: AppColors.black,
+      secondary: AppColors.accent,
+      onSecondary: AppColors.white,
       surface: AppColors.white,
       onSurface: AppColors.black,
-      onSurfaceVariant: AppColors.grey500,
-      surfaceContainerHighest: AppColors.grey100,
-      outline: AppColors.grey300,
+      onSurfaceVariant: AppColors.mute,
+      surfaceContainerHighest: AppColors.cream,
+      outline: AppColors.sand,
       error: AppColors.error,
     );
 
@@ -131,7 +143,7 @@ class AppTheme {
         style: TextButton.styleFrom(foregroundColor: AppColors.black),
       ),
       cardTheme: CardThemeData(
-        color: AppColors.grey100,
+        color: AppColors.cream,
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
@@ -139,14 +151,14 @@ class AppTheme {
         ),
       ),
       dividerTheme: const DividerThemeData(
-        color: AppColors.grey300,
+        color: AppColors.sand,
         thickness: 1,
         space: 1,
       ),
       listTileTheme: const ListTileThemeData(iconColor: AppColors.black),
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: AppColors.black,
-        linearTrackColor: AppColors.grey300,
+        linearTrackColor: AppColors.sand,
       ),
       snackBarTheme: const SnackBarThemeData(
         backgroundColor: AppColors.black,

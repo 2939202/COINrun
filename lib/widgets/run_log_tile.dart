@@ -128,7 +128,7 @@ class RunLogTile extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: const BoxDecoration(
-                color: AppColors.grey100,
+                color: AppColors.cream,
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.directions_run, size: 22),
@@ -152,7 +152,7 @@ class RunLogTile extends StatelessWidget {
             ),
             Text('+${run.goldEarned} G', style: textTheme.titleMedium),
             const SizedBox(width: AppSpacing.xs),
-            const Icon(Icons.chevron_right, size: 20, color: AppColors.grey500),
+            const Icon(Icons.chevron_right, size: 20, color: AppColors.mute),
           ],
         ),
       ),

@@ -82,7 +82,7 @@ class ProfileScreen extends StatelessWidget {
                     const SizedBox(height: 12),
                     const Text(
                       '장착중인 장비',
-                      style: TextStyle(fontSize: 12, color: AppColors.grey500),
+                      style: TextStyle(fontSize: 12, color: AppColors.mute),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -132,7 +132,7 @@ class ProfileScreen extends StatelessWidget {
                           padding: const EdgeInsets.all(8),
                           decoration: const BoxDecoration(
                             shape: BoxShape.circle,
-                            color: AppColors.grey100,
+                            color: AppColors.cream,
                           ),
                           child: const Text(
                             '잡화점',
@@ -151,7 +151,7 @@ class ProfileScreen extends StatelessWidget {
                               '다음 단계의',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: AppColors.grey500,
+                                color: AppColors.mute,
                               ),
                             ),
                             Text(

@@ -161,7 +161,7 @@ class _RunReport extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(
-              color: AppColors.volt,
+              color: AppColors.accent,
               borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
             child: Text(

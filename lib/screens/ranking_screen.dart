@@ -167,7 +167,7 @@ class _MyRankCard extends StatelessWidget {
                     return Text(
                       text,
                       style: textTheme.displayLarge?.copyWith(
-                        color: waiting ? AppColors.white : AppColors.volt,
+                        color: waiting ? AppColors.white : AppColors.accent,
                         fontSize: (!waiting && myRank == null) ? 28 : 40,
                       ),
                     );
@@ -200,7 +200,7 @@ class _MyRankCard extends StatelessWidget {
                     '설정에서 계정을 저장하면 그동안의 기록 그대로 랭킹에 올라가요.',
                     textAlign: TextAlign.right,
                     style: textTheme.labelMedium?.copyWith(
-                      color: AppColors.volt,
+                      color: AppColors.accent,
                       height: 1.3,
                     ),
                   ),
@@ -234,7 +234,7 @@ class _RankRow extends StatelessWidget {
 
     return Container(
       // 목록에서 나를 빨리 찾을 수 있게 표시합니다.
-      color: isMe ? AppColors.volt : null,
+      color: isMe ? AppColors.accent : null,
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
         vertical: AppSpacing.md,
@@ -302,7 +302,7 @@ class _Message extends StatelessWidget {
           textAlign: TextAlign.center,
           style: Theme.of(
             context,
-          ).textTheme.bodyMedium?.copyWith(color: AppColors.grey500),
+          ).textTheme.bodyMedium?.copyWith(color: AppColors.mute),
         ),
       ),
     );

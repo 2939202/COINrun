@@ -418,11 +418,20 @@ class _RunScreenState extends State<RunScreen> {
             const SizedBox(width: AppSpacing.md),
           ],
         ),
+        // 지도는 화면 끝까지 쓰고(top: false), 아래 패널만 시스템 영역을 피합니다.
+        //
+        // 기종에 따라 제스처 바나 내비게이션 바가 버튼을 덮는 일이 있어서,
+        // SafeArea가 잡아주는 여백에 더해 최소 여백을 따로 줍니다.
         body: SafeArea(
+          top: false,
+          bottom: false,
           child: Column(
             children: [
-              Expanded(flex: 55, child: _buildMap()),
-              Expanded(flex: 45, child: _buildPanel()),
+              Expanded(
+                flex: 52,
+                child: SafeArea(bottom: false, child: _buildMap()),
+              ),
+              Expanded(flex: 48, child: _buildPanel()),
             ],
           ),
         ),
@@ -454,7 +463,7 @@ class _RunScreenState extends State<RunScreen> {
                       points: segment,
                       strokeWidth: 3.5,
                       // 지도 도로선과 섞이지 않도록 형광색에 검은 테두리를 둘러 그립니다.
-                      color: AppColors.volt,
+                      color: AppColors.accent,
                       borderStrokeWidth: 1.5,
                       borderColor: AppColors.black,
                     ),
@@ -509,32 +518,54 @@ class _RunScreenState extends State<RunScreen> {
     final textTheme = Theme.of(context).textTheme;
     final RunRecord record = _tracker.record;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
+    return SafeArea(
+      top: false,
+      // minimum: 시스템 여백이 0이거나 아주 작은 기종에서도 이만큼은 띄웁니다.
+      // 이게 없으면 제스처 바 위에 버튼이 바싹 붙거나 가려집니다.
+      minimum: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
         AppSpacing.lg,
         AppSpacing.lg,
-        AppSpacing.md,
+        AppSpacing.lg,
       ),
       child: Column(
         children: [
-          // 메인 숫자: 러닝 시간
-          Text(formatDuration(record.elapsed), style: textTheme.displayLarge),
-          Text('시간', style: textTheme.labelMedium),
-          const SizedBox(height: AppSpacing.lg),
-          Row(
-            children: [
-              StatBlock(value: formatKm(record.distanceMeters), label: '킬로미터'),
-              StatBlock(value: '${record.steps}', label: '걸음'),
-              StatBlock(
-                value: formatPace(record.paceMinPerKm),
-                label: '평균 페이스',
+          // 숫자들은 자리가 모자라면 스크롤되게 둡니다.
+          //
+          // 예전에는 여기가 전부 한 Column이어서, 화면이 작은 기종에서는 내용이
+          // 패널 높이를 넘어가고 넘친 만큼 아래로 삐져나가 버튼이 내비게이션 바에
+          // 가려졌습니다. 버튼을 바깥에 따로 두면 그럴 수가 없습니다.
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  // 메인 숫자: 러닝 시간
+                  Text(
+                    formatDuration(record.elapsed),
+                    style: textTheme.displayLarge,
+                  ),
+                  Text('시간', style: textTheme.labelMedium),
+                  const SizedBox(height: AppSpacing.lg),
+                  Row(
+                    children: [
+                      StatBlock(
+                        value: formatKm(record.distanceMeters),
+                        label: '킬로미터',
+                      ),
+                      StatBlock(value: '${record.steps}', label: '걸음'),
+                      StatBlock(
+                        value: formatPace(record.paceMinPerKm),
+                        label: '평균 페이스',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  _RewardPreview(userId: widget.userId, record: record),
+                ],
               ),
-            ],
+            ),
           ),
-          const SizedBox(height: AppSpacing.lg),
-          _RewardPreview(userId: widget.userId, record: record),
-          const Spacer(),
+          const SizedBox(height: AppSpacing.md),
           _buildControls(),
         ],
       ),
@@ -584,7 +615,7 @@ class _RunScreenState extends State<RunScreen> {
                 icon: const Icon(Icons.play_arrow),
                 label: const Text('재개'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.volt,
+                  backgroundColor: AppColors.accent,
                   foregroundColor: AppColors.black,
                 ),
               ),
@@ -635,7 +666,7 @@ class _RewardPreviewState extends State<_RewardPreview> {
         vertical: AppSpacing.sm + 4,
       ),
       decoration: BoxDecoration(
-        color: AppColors.grey100,
+        color: AppColors.cream,
         borderRadius: BorderRadius.circular(AppRadius.pill),
       ),
       child: Row(
@@ -754,7 +785,7 @@ class _GpsDiagnostics extends StatelessWidget {
               Text(
                 '오류: $streamError',
                 style: const TextStyle(
-                  color: AppColors.volt,
+                  color: AppColors.accent,
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
                 ),
@@ -795,7 +826,7 @@ class _UserBadgeState extends State<_UserBadge> {
             vertical: AppSpacing.xs,
           ),
           decoration: BoxDecoration(
-            color: AppColors.grey100,
+            color: AppColors.cream,
             borderRadius: BorderRadius.circular(AppRadius.pill),
           ),
           child: Text(
@@ -820,7 +851,7 @@ class _PositionDot extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.black,
         shape: BoxShape.circle,
-        border: Border.all(color: AppColors.volt, width: 4),
+        border: Border.all(color: AppColors.accent, width: 4),
       ),
     );
   }

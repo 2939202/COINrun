@@ -125,7 +125,7 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
               '기록은 최근 ${UserRepository.maxStoredRuns}개까지 보관합니다.',
               style: Theme.of(
                 context,
-              ).textTheme.labelMedium?.copyWith(color: AppColors.grey500),
+              ).textTheme.labelMedium?.copyWith(color: AppColors.mute),
             ),
           ],
         );
@@ -194,7 +194,7 @@ class _Empty extends StatelessWidget {
           textAlign: TextAlign.center,
           style: Theme.of(
             context,
-          ).textTheme.bodyMedium?.copyWith(color: AppColors.grey500),
+          ).textTheme.bodyMedium?.copyWith(color: AppColors.mute),
         ),
       ),
     );

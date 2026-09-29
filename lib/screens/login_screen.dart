@@ -129,7 +129,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: AppSpacing.md),
               Text(
                 '달린 만큼 강해지는 나만의 캐릭터',
-                style: textTheme.bodyLarge?.copyWith(color: AppColors.grey500),
+                style: textTheme.bodyLarge?.copyWith(color: AppColors.mute),
               ),
               const SizedBox(height: AppSpacing.xl),
             ],
@@ -138,7 +138,7 @@ class _LoginScreenState extends State<LoginScreen> {
               Text(
                 '지금까지 모은 골드와 레벨은 그대로 두고, '
                 '이메일만 붙여둡니다. 폰을 바꿔도 이어서 할 수 있어요.',
-                style: textTheme.bodyMedium?.copyWith(color: AppColors.grey500),
+                style: textTheme.bodyMedium?.copyWith(color: AppColors.mute),
               ),
               const SizedBox(height: AppSpacing.lg),
             ],
@@ -215,9 +215,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 '게스트로 시작해도 나중에 설정에서 이메일을 붙일 수 있어요. '
                 '그때 기록은 그대로 남습니다. '
                 '다만 이메일을 붙이기 전에 앱을 지우면 기록이 사라집니다.',
-                style: textTheme.labelMedium?.copyWith(
-                  color: AppColors.grey500,
-                ),
+                style: textTheme.labelMedium?.copyWith(color: AppColors.mute),
               ),
             ],
 

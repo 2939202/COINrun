@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# 캐릭터 원본 작업 파일 (앱에는 assets/character/ 의 잘라낸 그림만 들어갑니다)
+러너 *.png
+러닝 RPG UI 리디자인.pdf
