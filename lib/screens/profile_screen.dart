@@ -77,7 +77,6 @@ class ProfileScreen extends StatelessWidget {
                     Expanded(
                       child: NotchedBox(
                         cut: 12,
-                        radius: 12,
                         padding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.md,
                           vertical: AppSpacing.md - 2,

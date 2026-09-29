@@ -71,7 +71,6 @@ class LevelCard extends StatelessWidget {
 
     return NotchedBox(
       cut: 16,
-      radius: 20,
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
         AppSpacing.md,

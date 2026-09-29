@@ -701,25 +701,15 @@ class _RunButton extends StatelessWidget {
       ],
     );
 
-    if (filled) {
-      return NotchedBox(
-        onTap: onTap,
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md + 2),
-        child: body,
-      );
-    }
-    // 완료 버튼은 테두리만. 잘린 모양은 안쪽 검은 테두리로 흉내냅니다.
-    return GestureDetector(
+    return NotchedBox(
+      cut: 14,
+      color: background,
+      // 검은 버튼은 흰 테두리, 흰 버튼은 검은 테두리를 안쪽에 한 겹 그립니다.
+      innerBorderColor: filled ? AppColors.white : AppColors.black,
+      innerBorderInset: filled ? 6 : 0,
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md + 2),
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-          border: Border.all(color: AppColors.black, width: 1.6),
-        ),
-        child: body,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md + 2),
+      child: body,
     );
   }
 }

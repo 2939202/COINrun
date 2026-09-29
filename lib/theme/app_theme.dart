@@ -61,12 +61,13 @@ class AppTheme {
   AppTheme._();
 
   // 큰 숫자는 세리프로 씁니다. 기록증이나 계기판 같은 인상을 주려는 것입니다.
-  // 안드로이드에서 'serif'는 Noto Serif로 이어집니다.
-  static const String numberFont = 'serif';
+  static const String numberFont = 'DMSerif';
+
+  // 한글 글꼴
+  static const String koreanFont = 'ChosunKm';
 
   static const TextStyle number = TextStyle(
     fontFamily: numberFont,
-    fontWeight: FontWeight.w700,
     height: 1.0,
   );
 
@@ -127,6 +128,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
+      fontFamily: koreanFont,
       scaffoldBackgroundColor: AppColors.white,
       // apply()는 모든 글자를 검은색으로 덮어쓰므로, 회색 라벨(labelMedium)은 원래 색으로 되돌립니다.
       textTheme: _textTheme

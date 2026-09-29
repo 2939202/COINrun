@@ -50,3 +50,9 @@ app.*.map.json
 
 # 시안 스크린샷 (참고용, 앱에는 안 들어갑니다)
 캡처*.PNG
+
+# Gradle이 만드는 캐시
+android/.kotlin/
+
+# 폰트 원본 압축파일 (풀어서 assets/fonts/ 에 넣었습니다)
+*.zip

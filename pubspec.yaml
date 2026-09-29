@@ -46,3 +46,13 @@ flutter:
     - assets/models/ # 캐릭터 3D 모델
     - assets/character/ # 캐릭터 2D 이미지
   uses-material-design: true
+
+  fonts:
+    # 큰 숫자용 세리프. 시안의 숫자 글꼴입니다.
+    - family: DMSerif
+      fonts:
+        - asset: assets/fonts/DMSerifDisplay-Regular.ttf
+    # 한글 본문/제목
+    - family: ChosunKm
+      fonts:
+        - asset: assets/fonts/ChosunKm.ttf

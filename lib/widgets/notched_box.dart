@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
 // ============================================================
-// 모서리가 잘린 카드
+// 모서리를 잘라낸 팔각형 카드
 //
-// 오른쪽 위와 왼쪽 아래를 45도로 잘라내고, 나머지 두 모서리는 둥글게 둡니다.
-// 표나 입장권 같은 느낌이 나서, 이 앱의 검은 카드와 큰 버튼에 공통으로 씁니다.
+// 네 모서리를 모두 45도로 잘라냅니다. 둥근 구석이 하나도 없어서
+// 표나 입장권 같은 인상이 납니다. 검은 카드에 공통으로 씁니다.
 //
-//      ╭──────────╱
-//      │          │
-//      ╱──────────╯
+//      ╱────────╲
+//      │        │
+//      ╲────────╱
 // ============================================================
 class NotchedBox extends StatelessWidget {
   final Widget child;
@@ -18,9 +18,12 @@ class NotchedBox extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final VoidCallback? onTap;
 
-  // 잘라내는 크기와 둥근 정도
+  // 잘라내는 크기
   final double cut;
-  final double radius;
+
+  // 안쪽에 그리는 테두리. 같은 팔각형 모양으로 한 겹 안에 들어갑니다.
+  final Color? innerBorderColor;
+  final double innerBorderInset;
 
   const NotchedBox({
     super.key,
@@ -28,19 +31,28 @@ class NotchedBox extends StatelessWidget {
     this.color = AppColors.black,
     this.padding,
     this.onTap,
-    this.cut = 18,
-    this.radius = 16,
+    this.cut = 16,
+    this.innerBorderColor,
+    this.innerBorderInset = 7,
   });
 
   @override
   Widget build(BuildContext context) {
-    final Widget body = Padding(
-      padding: padding ?? EdgeInsets.zero,
-      child: child,
-    );
+    Widget body = Padding(padding: padding ?? EdgeInsets.zero, child: child);
+
+    if (innerBorderColor != null) {
+      body = CustomPaint(
+        foregroundPainter: _InnerBorderPainter(
+          cut: cut,
+          inset: innerBorderInset,
+          color: innerBorderColor!,
+        ),
+        child: body,
+      );
+    }
 
     return ClipPath(
-      clipper: _NotchedClipper(cut: cut, radius: radius),
+      clipper: _NotchedClipper(cut: cut),
       child: Material(
         color: color,
         child: onTap == null ? body : InkWell(onTap: onTap, child: body),
@@ -49,36 +61,69 @@ class NotchedBox extends StatelessWidget {
   }
 }
 
+// 네 모서리를 자른 팔각형
+Path _octagon(Size size, double cut) {
+  final double w = size.width;
+  final double h = size.height;
+  // 카드가 아주 작아도 모양이 깨지지 않게 줄여 잡습니다.
+  final double c = cut.clamp(0, size.shortestSide / 2);
+
+  return Path()
+    ..moveTo(c, 0)
+    ..lineTo(w - c, 0)
+    ..lineTo(w, c)
+    ..lineTo(w, h - c)
+    ..lineTo(w - c, h)
+    ..lineTo(c, h)
+    ..lineTo(0, h - c)
+    ..lineTo(0, c)
+    ..close();
+}
+
 class _NotchedClipper extends CustomClipper<Path> {
   final double cut;
-  final double radius;
 
-  const _NotchedClipper({required this.cut, required this.radius});
+  const _NotchedClipper({required this.cut});
 
   @override
-  Path getClip(Size size) {
-    final double w = size.width;
-    final double h = size.height;
-    // 카드가 아주 작아도 모양이 깨지지 않게 줄여 잡습니다.
-    final double c = cut.clamp(0, size.shortestSide / 2);
-    final double r = radius.clamp(0, size.shortestSide / 2);
+  Path getClip(Size size) => _octagon(size, cut);
 
-    return Path()
-      ..moveTo(r, 0)
-      ..lineTo(w - c, 0) // 위쪽
-      ..lineTo(w, c) // 오른쪽 위 - 잘림
-      ..lineTo(w, h - r)
-      ..arcToPoint(Offset(w - r, h), radius: Radius.circular(r)) // 오른쪽 아래 - 둥글게
-      ..lineTo(c, h) // 아래쪽
-      ..lineTo(0, h - c) // 왼쪽 아래 - 잘림
-      ..lineTo(0, r)
-      ..arcToPoint(Offset(r, 0), radius: Radius.circular(r)) // 왼쪽 위 - 둥글게
-      ..close();
+  @override
+  bool shouldReclip(_NotchedClipper old) => old.cut != cut;
+}
+
+// 카드 안쪽에 한 겹 더 그리는 테두리
+class _InnerBorderPainter extends CustomPainter {
+  final double cut;
+  final double inset;
+  final Color color;
+
+  const _InnerBorderPainter({
+    required this.cut,
+    required this.inset,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Size inner = Size(size.width - inset * 2, size.height - inset * 2);
+    if (inner.width <= 0 || inner.height <= 0) return;
+
+    canvas.save();
+    canvas.translate(inset, inset);
+    canvas.drawPath(
+      _octagon(inner, cut - inset / 2),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..color = color,
+    );
+    canvas.restore();
   }
 
   @override
-  bool shouldReclip(_NotchedClipper old) =>
-      old.cut != cut || old.radius != radius;
+  bool shouldRepaint(_InnerBorderPainter old) =>
+      old.cut != cut || old.inset != inset || old.color != color;
 }
 
 // ============================================================
