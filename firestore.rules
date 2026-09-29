@@ -20,13 +20,17 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // 유저 문서와 그 아래 모든 것 (러닝 기록 runs, 경로 routes 등)
+    //
+    // {document=**}는 하위 컬렉션 전부를 뜻합니다. Firestore 규칙은 하위 컬렉션에
+    // 자동으로 이어지지 않아서, 예전처럼 컬렉션마다 적어두면 새 컬렉션을 만들 때마다
+    // 규칙 고치는 걸 잊고 "권한 없음"으로 저장이 막히게 됩니다.
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
-
-      // 러닝 기록
-      match /runs/{runId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
-      }
     }
 
     // 랭킹 목록

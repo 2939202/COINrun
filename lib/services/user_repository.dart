@@ -7,6 +7,7 @@ import '../game/route_simplifier.dart';
 import '../game/run_rules.dart';
 import '../models/equipment_set.dart';
 import '../models/run_log.dart';
+import '../models/run_route.dart';
 import '../models/run_record.dart';
 import '../models/user_model.dart';
 import 'ranking_repository.dart';
@@ -44,6 +45,15 @@ class UserRepository {
     );
   }
 
+  CollectionReference<Map<String, dynamic>> _routes(String userId) =>
+      _userDoc(userId).collection('routes');
+
+  // 지도를 보여줄 때만 읽습니다. 목록에서는 읽지 않습니다.
+  Future<RunRoute> loadRoute(String userId, String runId) async {
+    final snapshot = await _routes(userId).doc(runId).get();
+    return RunRoute.fromMap(snapshot.data());
+  }
+
   // 최근 러닝 기록 (최신순)
   // 기본값은 홈의 "최근 러닝" 미리보기 개수입니다.
   // 전체 기록 화면은 limit에 maxStoredRuns를 넣어서 보관 중인 것을 전부 봅니다.
@@ -54,8 +64,9 @@ class UserRepository {
         .limit(limit)
         .snapshots()
         .map(
-          (query) =>
-              query.docs.map((doc) => RunLog.fromMap(doc.data())).toList(),
+          (query) => query.docs
+              .map((doc) => RunLog.fromMap(doc.id, doc.data()))
+              .toList(),
         );
   }
 
@@ -99,11 +110,19 @@ class UserRepository {
   Future<void> deleteAccountData(String userId) async {
     await RankingRepository.instance.removeEntry(userId);
 
-    // 러닝 기록은 문서가 여러 개라 나눠서 지웁니다.
+    // 러닝 기록과 경로는 문서가 여러 개라 나눠서 지웁니다.
     // (한 번에 지울 수 있는 개수에 한도가 있습니다)
-    final runs = _userDoc(userId).collection('runs');
+    await _deleteAll(_userDoc(userId).collection('runs'));
+    await _deleteAll(_routes(userId));
+
+    await _userDoc(userId).delete();
+  }
+
+  Future<void> _deleteAll(
+    CollectionReference<Map<String, dynamic>> target,
+  ) async {
     while (true) {
-      final found = await runs
+      final found = await target
           .limit(100)
           .get(const GetOptions(source: Source.server));
       if (found.docs.isEmpty) break;
@@ -114,8 +133,6 @@ class UserRepository {
       }
       await batch.commit();
     }
-
-    await _userDoc(userId).delete();
   }
 
   Future<void> updateNickname(String userId, String nickname) async {
@@ -160,6 +177,8 @@ class UserRepository {
     final batch = _firestore.batch();
     for (final doc in oldest.docs) {
       batch.delete(doc.reference);
+      // 경로는 같은 id로 따로 저장돼 있습니다. 같이 지우지 않으면 주인 없는 경로가 남습니다.
+      batch.delete(_routes(userId).doc(doc.id));
     }
     await batch.commit();
   }
@@ -210,18 +229,24 @@ class UserRepository {
         );
       }
 
+      // 러닝 기록과 경로를 같은 id로 나눠서 담습니다.
+      // 문서 이름을 미리 받아두면 두 곳에 같은 id를 쓸 수 있습니다.
+      final runRef = userDoc.collection('runs').doc();
+
+      // 경로는 무겁고 목록에서는 쓰지 않아서 따로 둡니다. (models/run_route.dart 참고)
+      // 점이 수천 개라 그대로 담으면 문서가 너무 커져서 솎아내고 저장합니다.
+      transaction.set(
+        _routes(userId).doc(runRef.id),
+        RunRoute.toFields(RouteSimplifier.simplifySegments(run.segments)),
+      );
+
       // 러닝 기록 보관 (나중에 기록 화면, 랭킹, 부정행위 검사에 사용)
-      transaction.set(userDoc.collection('runs').doc(), {
+      transaction.set(runRef, {
         'distanceMeters': run.distanceMeters,
         'durationSeconds': run.elapsed.inSeconds,
         'movingSeconds': run.movingTime.inSeconds,
         'steps': run.steps,
         'stepsEstimated': run.stepsEstimated, // 센서 없이 추정한 걸음인지 (부정행위 검사용)
-        // 지나온 길. 점이 수천 개라 그대로 담으면 문서가 너무 커져서 솎아내고 저장합니다.
-        //
-        // Firestore는 배열 안에 배열을 담지 못합니다. 그래서 모든 점을 한 줄로 이어 붙이고,
-        // 새 토막이 시작되는 자리만 pathBreaks에 따로 적어둡니다.
-        ...RunLog.pathFields(RouteSimplifier.simplifySegments(run.segments)),
         'goldEarned': gold,
         'expEarned': exp,
         'gearSetId': gear?.id, // 어떤 장비를 입고 뛰었는지 (나중에 기록 화면에서 사용)

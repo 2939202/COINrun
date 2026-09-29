@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../game/run_rules.dart';
 import '../models/run_record.dart';
+import '../models/run_route.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/route_map.dart';
@@ -101,7 +102,7 @@ class _RunReport extends StatelessWidget {
                         SizedBox(
                           height: 200,
                           width: double.infinity,
-                          child: RouteMap(segments: record.segments),
+                          child: RouteMap(route: RunRoute(record.segments)),
                         ),
                         Padding(
                           padding: const EdgeInsets.all(AppSpacing.lg),

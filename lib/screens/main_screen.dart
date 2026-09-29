@@ -200,7 +200,8 @@ class _MainScreenState extends State<MainScreen> {
                 for (final run in runs) ...[
                   RunLogTile(
                     run: run,
-                    onTap: () => _open(RunDetailScreen(run: run)),
+                    onTap: () =>
+                        _open(RunDetailScreen(userId: _userId, run: run)),
                   ),
                   if (run != runs.last) const Divider(),
                 ],

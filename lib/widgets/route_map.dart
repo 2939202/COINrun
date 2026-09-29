@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../models/run_route.dart';
 import '../theme/app_theme.dart';
 
 // ============================================================
@@ -15,28 +16,23 @@ import '../theme/app_theme.dart';
 // 완료 리포트와 기록 상세 화면에서 같이 씁니다.
 // ============================================================
 class RouteMap extends StatelessWidget {
-  // 경로 토막들. 신호가 오래 끊긴 구간은 토막이 나뉘어서, 실제로 지나지 않은 길을
-  // 선으로 잇지 않습니다.
-  final List<List<LatLng>> segments;
+  final RunRoute route;
 
   // 경로 둘레에 남길 여백. 선이 화면 끝에 붙지 않게 합니다.
   final double padding;
 
-  const RouteMap({super.key, required this.segments, this.padding = 28});
-
-  // 지도 범위를 잡을 때는 토막을 신경 쓰지 않고 점만 씁니다.
-  List<LatLng> get _points => [for (final segment in segments) ...segment];
+  const RouteMap({super.key, required this.route, this.padding = 28});
 
   @override
   Widget build(BuildContext context) {
     // 선을 그릴 만한 토막이 하나도 없으면 (경로를 저장하기 전에 뛴 기록 포함)
     final List<List<LatLng>> drawable = [
-      for (final segment in segments)
+      for (final segment in route.segments)
         if (segment.length >= 2) segment,
     ];
     if (drawable.isEmpty) return const _NoRoute();
 
-    final List<LatLng> points = _points;
+    final List<LatLng> points = route.points;
 
     return FlutterMap(
       options: MapOptions(

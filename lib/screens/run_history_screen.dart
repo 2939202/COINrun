@@ -54,7 +54,8 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => RunDetailScreen(run: run),
+                      builder: (context) =>
+                          RunDetailScreen(userId: widget.userId, run: run),
                     ),
                   ),
                 ),
