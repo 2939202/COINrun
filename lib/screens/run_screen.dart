@@ -452,7 +452,7 @@ class _RunScreenState extends State<RunScreen> {
             onMapReady: () => _isMapReady = true,
           ),
           children: [
-            MapTiles.layer(),
+            ...MapTiles.layers(),
             PolylineLayer(
               polylines: [
                 // 토막마다 따로 긋습니다. 신호가 끊겼던 구간이 직선으로 이어지지 않습니다.

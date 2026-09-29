@@ -47,7 +47,7 @@ class RouteMap extends StatelessWidget {
         ),
       ),
       children: [
-        MapTiles.layer(),
+        ...MapTiles.layers(),
         PolylineLayer(
           polylines: [
             for (final segment in drawable)
