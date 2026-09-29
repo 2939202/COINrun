@@ -172,14 +172,20 @@ class _MainScreenState extends State<MainScreen> {
         innerBorderColor: AppColors.white,
         onTap: () => _open(RunScreen(userId: _userId)),
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.md + 6),
-        child: Center(
-          child: Text(
-            '시작',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: AppColors.white,
-              fontSize: 21,
+        // Center를 쓰면 안 됩니다. 화면 아래에 붙는 자리(bottomNavigationBar)는
+        // 높이 제한이 화면 전체라서, Center가 그만큼 늘어나 버튼이 화면을 덮습니다.
+        // Row는 가로만 채우고 높이는 글자에 맞춥니다.
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '시작',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: AppColors.white,
+                fontSize: 21,
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
