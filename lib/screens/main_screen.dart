@@ -166,26 +166,36 @@ class _MainScreenState extends State<MainScreen> {
         AppSpacing.lg,
         AppSpacing.md,
       ),
-      child: NotchedBox(
-        cut: 16,
-        // 시안처럼 안쪽에 흰 테두리를 한 겹 더 그립니다.
-        innerBorderColor: AppColors.white,
-        onTap: () => _open(RunScreen(userId: _userId)),
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md + 6),
-        // Center를 쓰면 안 됩니다. 화면 아래에 붙는 자리(bottomNavigationBar)는
-        // 높이 제한이 화면 전체라서, Center가 그만큼 늘어나 버튼이 화면을 덮습니다.
-        // Row는 가로만 채우고 높이는 글자에 맞춥니다.
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              '시작',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: AppColors.white,
-                fontSize: 21,
-              ),
+      // 시작 버튼만 둥근 모양입니다. 모서리를 자른 팔각형은 검은 카드들이 씁니다.
+      child: Material(
+        color: AppColors.black,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _open(RunScreen(userId: _userId)),
+          child: Container(
+            margin: const EdgeInsets.all(6),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            decoration: BoxDecoration(
+              // 시안처럼 안쪽에 흰 테두리를 한 겹 더 그립니다.
+              border: Border.all(color: AppColors.white, width: 1.2),
+              borderRadius: BorderRadius.circular(AppRadius.md - 6),
             ),
-          ],
+            // Center를 쓰면 안 됩니다. 화면 아래에 붙는 자리는 높이 제한이 화면
+            // 전체라서 Center가 그만큼 늘어나 버튼이 화면을 덮습니다.
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '시작',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: AppColors.white,
+                    fontSize: 21,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
