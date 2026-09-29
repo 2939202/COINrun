@@ -43,6 +43,9 @@ class RankingRepository {
 
   // 내 순위 (1등이면 1). 아직 한 번도 안 뛰었으면 null입니다.
   Future<int?> myRank(RankingKind kind, UserModel user) async {
+    // 게스트는 랭킹에 줄이 없어서 순위도 없습니다.
+    if (user.isGuest) return null;
+
     final num mine = switch (kind) {
       RankingKind.distance => user.totalDistance,
       RankingKind.level => user.totalExp,
@@ -93,6 +96,10 @@ class RankingRepository {
 
   DocumentReference<Map<String, dynamic>> entryDoc(String userId) =>
       _board.doc(userId);
+
+  // 랭킹에서 뺍니다. 탈퇴했거나, 게스트로 쓰는 중일 때 부릅니다.
+  // 없는 줄을 지워도 오류가 나지 않아서 그냥 불러도 됩니다.
+  Future<void> removeEntry(String userId) => _board.doc(userId).delete();
 
   Future<void> renameEntry(String userId, String nickname) {
     return _board.doc(userId).set({

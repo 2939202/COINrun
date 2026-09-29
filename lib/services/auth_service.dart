@@ -63,6 +63,26 @@ class AuthService {
 
   Future<void> signOut() => _auth.signOut();
 
+  // 계정 자체를 없앱니다. Firestore 데이터는 UserRepository가 먼저 지웁니다.
+  //
+  // 마지막 로그인이 오래됐으면 Firebase가 거절합니다(requires-recent-login).
+  // 계정을 지우는 일은 되돌릴 수 없어서, 본인이 맞는지 다시 확인하려는 것입니다.
+  Future<void> deleteAccount() async {
+    final User? user = _auth.currentUser;
+    if (user == null) throw const AuthException('로그인 상태가 아닙니다.');
+    try {
+      await user.delete();
+    } on FirebaseAuthException catch (error) {
+      if (error.code == 'requires-recent-login') {
+        throw const AuthException(
+          '보안을 위해 다시 로그인한 뒤에 탈퇴할 수 있습니다.\n'
+          '로그아웃했다가 다시 로그인해 주세요.',
+        );
+      }
+      throw AuthException(_messageFor(error.code));
+    }
+  }
+
   // 회원가입 화면에서 닉네임을 따로 받지 않으므로 자동으로 지어줍니다.
   // (설정 화면에서 언제든 바꿀 수 있습니다)
   //   이메일이 있으면 앞부분을 쓰고, 게스트면 uid 앞 4글자를 붙여 서로 구분되게 합니다.

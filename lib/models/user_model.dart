@@ -3,6 +3,13 @@ import '../game/run_rules.dart';
 // Firestore의 users/{userId} 문서 한 개를 나타내는 유저 데이터
 class UserModel {
   final String nickname;
+
+  // 이메일 없이 게스트로 쓰는 중인지.
+  //
+  // 게스트는 랭킹에 올리지 않습니다. 앱을 지우면 돌아올 수 없는 계정이라,
+  // 랭킹에 남겨두면 주인 없는 줄이 계속 쌓입니다.
+  // 나중에 이메일을 붙이면 false가 되고 그때부터 랭킹에 들어갑니다.
+  final bool isGuest;
   final int level;
   final int exp; // 현재 레벨에서 쌓인 경험치 (레벨업하면 초과분만 남음)
   final int gold;
@@ -19,6 +26,7 @@ class UserModel {
 
   const UserModel({
     required this.nickname,
+    required this.isGuest,
     required this.level,
     required this.exp,
     required this.gold,
@@ -32,9 +40,10 @@ class UserModel {
   });
 
   // 새로 가입한 유저의 기본값 - 장비 없이 맨몸으로 시작합니다.
-  factory UserModel.initial(String nickname) {
+  factory UserModel.initial(String nickname, {required bool isGuest}) {
     return UserModel(
       nickname: nickname,
+      isGuest: isGuest,
       level: 1,
       exp: 0,
       gold: 0,
@@ -54,6 +63,9 @@ class UserModel {
   factory UserModel.fromMap(Map<String, dynamic> map) {
     return UserModel(
       nickname: map['nickname'] ?? '이름없음',
+      // 이 값이 없던 시절 문서는 이메일 계정으로 봅니다. 그때는 게스트도 랭킹에 있었고,
+      // 지우면 기존 사용자가 랭킹에서 사라져 버리기 때문입니다.
+      isGuest: map['isGuest'] as bool? ?? false,
       level: (map['level'] as num?)?.toInt() ?? 1,
       exp: (map['exp'] as num?)?.toInt() ?? 0,
       gold: (map['gold'] as num?)?.toInt() ?? 0,
@@ -79,6 +91,7 @@ class UserModel {
   Map<String, dynamic> toMap() {
     return {
       'nickname': nickname,
+      'isGuest': isGuest,
       'level': level,
       'exp': exp,
       'gold': gold,

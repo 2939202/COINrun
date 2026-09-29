@@ -158,10 +158,12 @@ class _MyRankCard extends StatelessWidget {
                     final bool waiting =
                         snapshot.connectionState == ConnectionState.waiting;
                     final int? myRank = snapshot.data;
-                    // 아직 한 번도 안 뛰었으면 순위가 없습니다.
+                    // 게스트는 랭킹에 줄이 없고, 뛴 적이 없으면 순위가 없습니다.
                     final String text = waiting
                         ? '...'
-                        : (myRank == null ? '기록 없음' : '$myRank위');
+                        : (myRank == null
+                              ? (user.isGuest ? '게스트' : '기록 없음')
+                              : '$myRank위');
                     return Text(
                       text,
                       style: textTheme.displayLarge?.copyWith(
@@ -190,6 +192,20 @@ class _MyRankCard extends StatelessWidget {
                 ),
                 style: textTheme.labelMedium,
               ),
+              if (user.isGuest) ...[
+                const SizedBox(height: AppSpacing.xs),
+                SizedBox(
+                  width: 180,
+                  child: Text(
+                    '설정에서 계정을 저장하면 그동안의 기록 그대로 랭킹에 올라가요.',
+                    textAlign: TextAlign.right,
+                    style: textTheme.labelMedium?.copyWith(
+                      color: AppColors.volt,
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ],

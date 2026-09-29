@@ -12,6 +12,7 @@ UserModel _user({
   String? equipped,
 }) => UserModel(
   nickname: '테스터',
+  isGuest: false,
   level: level,
   exp: 0,
   gold: gold,

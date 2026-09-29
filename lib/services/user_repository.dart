@@ -57,25 +57,66 @@ class UserRepository {
 
   // 로그인 직후에 부릅니다. 문서가 없을 때만 새로 만들고, 이미 있으면 아무것도 하지 않습니다.
   // (이미 있는데 set()으로 덮어쓰면 모아둔 골드와 레벨이 날아갑니다)
-  Future<void> ensureUser(String userId, String nickname) async {
+  Future<void> ensureUser(
+    String userId,
+    String nickname, {
+    required bool isGuest,
+  }) async {
     final userDoc = _userDoc(userId);
     final snapshot = await userDoc.get();
 
-    final UserModel user;
+    UserModel user;
     if (snapshot.exists) {
       user = UserModel.fromMap(snapshot.data()!);
+      // 게스트였다가 이메일을 붙였으면 여기서 반영됩니다.
+      if (user.isGuest != isGuest) {
+        await userDoc.set({'isGuest': isGuest}, SetOptions(merge: true));
+        user = UserModel.fromMap({...snapshot.data()!, 'isGuest': isGuest});
+      }
     } else {
-      user = UserModel.initial(nickname);
+      user = UserModel.initial(nickname, isGuest: isGuest);
       await userDoc.set(user.toMap());
     }
 
-    // 랭킹 목록에 내 정보를 올려둡니다. 로그인할 때마다 하므로,
-    // 랭킹을 붙이기 전부터 쓰던 계정도 처음 들어올 때 목록에 들어옵니다.
-    await RankingRepository.instance.publish(userId, user);
+    if (isGuest) {
+      // 게스트는 랭킹에 올리지 않습니다.
+      // 예전에 게스트로 올라가 있던 줄이 있으면 여기서 지웁니다.
+      await RankingRepository.instance.removeEntry(userId);
+    } else {
+      // 로그인할 때마다 올리므로, 랭킹을 붙이기 전부터 쓰던 계정도 여기서 들어옵니다.
+      await RankingRepository.instance.publish(userId, user);
+    }
+  }
+
+  // 회원 탈퇴 - 이 계정이 만든 것을 전부 지웁니다.
+  //
+  // 지우는 순서가 중요합니다. 랭킹 줄을 먼저 지워야, 중간에 실패해도
+  // "주인 없는 랭킹 줄"이 남지 않습니다. 남은 것은 다시 불러서 마저 지우면 됩니다.
+  Future<void> deleteAccountData(String userId) async {
+    await RankingRepository.instance.removeEntry(userId);
+
+    // 러닝 기록은 문서가 여러 개라 나눠서 지웁니다.
+    // (한 번에 지울 수 있는 개수에 한도가 있습니다)
+    final runs = _userDoc(userId).collection('runs');
+    while (true) {
+      final found = await runs
+          .limit(100)
+          .get(const GetOptions(source: Source.server));
+      if (found.docs.isEmpty) break;
+
+      final batch = _firestore.batch();
+      for (final doc in found.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    }
+
+    await _userDoc(userId).delete();
   }
 
   Future<void> updateNickname(String userId, String nickname) async {
     await _userDoc(userId).set({'nickname': nickname}, SetOptions(merge: true));
+    // 게스트는 랭킹에 줄이 없어서 고칠 것도 없습니다. (없는 줄을 고쳐도 탈은 없음)
     await RankingRepository.instance.renameEntry(userId, nickname);
   }
 
@@ -149,16 +190,21 @@ class UserRepository {
 
       // 랭킹 목록도 같은 트랜잭션에서 갱신합니다.
       // 따로 쓰면 한쪽만 성공해서 순위가 실제 기록과 어긋날 수 있습니다.
-      transaction.set(
-        RankingRepository.instance.entryDoc(userId),
-        RankingRepository.entryData(
-          nickname: user.nickname,
-          level: next.level,
-          totalDistance: totalDistance,
-          totalExp: totalExp,
-        ),
-        SetOptions(merge: true),
-      );
+      //
+      // 게스트는 올리지 않습니다. 기록은 평소대로 쌓이고, 나중에 이메일을 붙이면
+      // 그동안의 누적 거리와 경험치를 그대로 들고 랭킹에 들어갑니다.
+      if (!user.isGuest) {
+        transaction.set(
+          RankingRepository.instance.entryDoc(userId),
+          RankingRepository.entryData(
+            nickname: user.nickname,
+            level: next.level,
+            totalDistance: totalDistance,
+            totalExp: totalExp,
+          ),
+          SetOptions(merge: true),
+        );
+      }
 
       // 러닝 기록 보관 (나중에 기록 화면, 랭킹, 부정행위 검사에 사용)
       transaction.set(userDoc.collection('runs').doc(), {

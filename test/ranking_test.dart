@@ -80,6 +80,49 @@ void main() {
     });
   });
 
+  group('게스트는 랭킹에서 빠진다', () {
+    test('새 게스트 계정은 게스트로 표시된다', () {
+      final guest = UserModel.initial('러너3f9a', isGuest: true);
+      expect(guest.isGuest, isTrue);
+      expect(UserModel.fromMap(guest.toMap()).isGuest, isTrue);
+    });
+
+    test('새 이메일 계정은 게스트가 아니다', () {
+      final member = UserModel.initial('runner', isGuest: false);
+      expect(member.isGuest, isFalse);
+      expect(UserModel.fromMap(member.toMap()).isGuest, isFalse);
+    });
+
+    // 이 값이 없던 시절 문서를 게스트로 보면, 쓰고 있던 사람이 랭킹에서 사라집니다.
+    test('isGuest가 없는 옛 문서는 이메일 계정으로 본다', () {
+      final user = UserModel.fromMap({'nickname': '옛유저', 'level': 3});
+      expect(user.isGuest, isFalse);
+    });
+
+    // 게스트로 뛴 기록은 그대로 남아 있다가, 계정을 붙이면 같이 올라가야 합니다.
+    test('게스트도 누적 기록은 그대로 쌓인다', () {
+      final guest = UserModel.fromMap({
+        'isGuest': true,
+        'totalDistance': 12000.0,
+        'level': 4,
+        'exp': 50,
+      });
+      expect(guest.totalDistance, 12000.0);
+      expect(guest.totalExp, RunRules.totalExpFor(4, 50));
+
+      // 이메일을 붙이면 isGuest만 바뀌고 나머지는 그대로입니다.
+      final linked = UserModel.fromMap({
+        'isGuest': false,
+        'totalDistance': 12000.0,
+        'level': 4,
+        'exp': 50,
+      });
+      expect(linked.isGuest, isFalse);
+      expect(linked.totalDistance, guest.totalDistance);
+      expect(linked.totalExp, guest.totalExp);
+    });
+  });
+
   group('랭킹을 붙이기 전 계정', () {
     // totalExp 필드가 없던 시절 문서도 순위에 끼워줘야 합니다.
     test('totalExp가 없으면 레벨과 경험치로 되짚어 구한다', () {
@@ -93,7 +136,7 @@ void main() {
     });
 
     test('저장한 값을 그대로 다시 읽어온다', () {
-      final user = UserModel.initial('러너1호');
+      final user = UserModel.initial('러너1호', isGuest: false);
       expect(UserModel.fromMap(user.toMap()).totalExp, 0);
     });
   });

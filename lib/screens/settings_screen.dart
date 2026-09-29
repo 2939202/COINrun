@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/user_repository.dart';
+import '../theme/app_theme.dart';
 import 'login_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -20,6 +21,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // (아직 화면 안에서만 바뀌고 저장되지는 않습니다. 소리를 넣을 때 같이 붙일 예정입니다)
   bool _isBgmEnabled = true;
   bool _isSfxEnabled = true;
+
+  bool _isDeleting = false; // 탈퇴 처리 중 (화면을 덮어 두 번 누르지 못하게)
 
   late final Stream<UserModel?> _userStream = UserRepository.instance.watchUser(
     widget.userId,
@@ -40,10 +43,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: (context) => const LoginScreen(mode: AuthMode.link),
       ),
     );
-    if (linked == true) {
-      setState(() {}); // 계정 표시를 새로 그립니다.
-      _toast('계정이 저장되었습니다. 이제 다른 기기에서도 이어서 할 수 있어요.');
+    if (linked != true) return;
+
+    // 이제 게스트가 아니므로 랭킹에 올립니다.
+    // (ensureUser가 isGuest 변화를 보고 알아서 처리합니다)
+    final account = AuthService.instance.currentUser;
+    if (account != null) {
+      await UserRepository.instance.ensureUser(
+        widget.userId,
+        AuthService.defaultNickname(uid: account.uid, email: account.email),
+        isGuest: account.isAnonymous,
+      );
     }
+
+    if (!mounted) return;
+    setState(() {}); // 계정 표시를 새로 그립니다.
+    _toast('계정이 저장되었습니다. 이제 랭킹에도 오르고, 다른 기기에서 이어서 할 수 있어요.');
   }
 
   Future<void> _signOut() async {
@@ -79,6 +94,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
+  // 회원 탈퇴 - 랭킹, 러닝 기록, 유저 문서, 계정 순서로 지웁니다.
+  Future<void> _deleteAccount() async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('정말 탈퇴할까요?'),
+        content: const Text(
+          '지금까지 모은 골드, 레벨, 러닝 기록이 모두 사라집니다.\n'
+          '되돌릴 수 없습니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('탈퇴하기', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isDeleting = true);
+    try {
+      // 데이터를 먼저 지웁니다. 계정을 먼저 지우면 권한이 사라져서
+      // 남은 데이터를 지울 수 없게 됩니다.
+      await UserRepository.instance.deleteAccountData(widget.userId);
+      await AuthService.instance.deleteAccount();
+      // 성공하면 AuthGate가 로그인 화면으로 바꿔줍니다.
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      setState(() => _isDeleting = false);
+      _toast(error.message);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isDeleting = false);
+      _toast('탈퇴에 실패했습니다. 인터넷 연결을 확인해 주세요.');
+    }
+  }
+
   Future<void> _editNickname(String current) async {
     final String? name = await showDialog<String>(
       context: context,
@@ -94,6 +151,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final User? account = AuthService.instance.currentUser;
     final bool isGuest = account?.isAnonymous ?? false;
+
+    if (_isDeleting) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: AppSpacing.md),
+              Text('탈퇴 처리 중입니다...'),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('설정')),
@@ -142,6 +214,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             leading: const Icon(Icons.logout),
             title: const Text('로그아웃'),
             onTap: _signOut,
+          ),
+          ListTile(
+            leading: const Icon(
+              Icons.person_remove_outlined,
+              color: Colors.red,
+            ),
+            title: const Text('회원 탈퇴', style: TextStyle(color: Colors.red)),
+            subtitle: const Text('계정과 기록을 모두 지웁니다'),
+            onTap: _deleteAccount,
           ),
           const Divider(),
 

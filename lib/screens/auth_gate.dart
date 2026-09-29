@@ -67,6 +67,9 @@ class _UserDocGateState extends State<_UserDocGate> {
       uid: widget.account.uid,
       email: widget.account.email,
     ),
+    // 게스트는 랭킹에 올리지 않습니다. 나중에 이메일을 붙이면 여기서 false가 되고
+    // 그때부터 랭킹에 들어갑니다.
+    isGuest: widget.account.isAnonymous,
   );
 
   @override

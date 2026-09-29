@@ -1,4 +1,4 @@
-import '../models/equipment_set.dart';
+import '../models/equipment_set.dart'; // 장비 세트 데이터 모델 클래스를 다른 파일에서 불러옵니다.
 
 // ============================================================
 // 상점에서 파는 장비 세트 목록
@@ -15,51 +15,61 @@ import '../models/equipment_set.dart';
 //   골드와 레벨 중 한쪽만 먼저 차면 기다려야 하도록 일부러 비슷하게 맞췄습니다.
 // ============================================================
 class EquipmentCatalog {
-  EquipmentCatalog._();
+  // 장비 세트 목록 데이터 조회 기능을 제공 카탈로그 클래스 선언
+  EquipmentCatalog._(); //비공개 생성자
 
   static const EquipmentSet novice = EquipmentSet(
-    id: 'novice',
-    name: '초급 모험가 세트',
-    description: '처음 길을 나서는 사람이 갖추는 기본 차림.',
-    price: 500,
-    requiredLevel: 1,
-    power: 3,
-    stamina: 3,
-    speed: 2,
-  );
+    // 초급 모험가 세트 정보를 가지는 변하지 않는 정적 상수를 선언합니다.
+    id: 'novice', // 초급 세트의 고유 식별자 문자열입니다.
+    name: '초급 모험가 세트', // 화면에 표시될 초급 세트의 이름입니다.
+    description: '처음 길을 나서는 사람이 갖추는 기본 차림.', // 초급 세트에 대한 설명 글입니다.
+    price: 500, // 초급 세트의 구매 가격인 골드 수치입니다.
+    requiredLevel: 1, // 초급 세트를 착용하기 위해 필요한 최소 레벨입니다.
+    power: 3, // 초급 세트 착용 시 증가하는 공격력 능력치입니다.
+    stamina: 3, // 초급 세트 착용 시 증가하는 체력 능력치입니다.
+    speed: 2, // 초급 세트 착용 시 증가하는 이동 속도 능력치입니다.
+  ); // 초급 모험가 세트 객체 설정을 마칩니다.
 
   static const EquipmentSet adept = EquipmentSet(
-    id: 'adept',
-    name: '중급 모험가 세트',
-    description: '먼 길을 여러 번 다녀온 사람이 갖추는 차림.',
-    price: 3000,
-    requiredLevel: 5,
-    power: 8,
-    stamina: 8,
-    speed: 5,
-  );
+    // 중급 모험가 세트 정보를 가지는 변하지 않는 정적 상수를 선언합니다.
+    id: 'adept', // 중급 세트의 고유 식별자 문자열입니다.
+    name: '중급 모험가 세트', // 화면에 표시될 중급 세트의 이름입니다.
+    description: '먼 길을 여러 번 다녀온 사람이 갖추는 차림.', // 중급 세트에 대한 설명 글입니다.
+    price: 3000, // 중급 세트의 구매 가격인 골드 수치입니다.
+    requiredLevel: 5, // 중급 세트를 착용하기 위해 필요한 최소 레벨입니다.
+    power: 8, // 중급 세트 착용 시 증가하는 공격력 능력치입니다.
+    stamina: 8, // 중급 세트 착용 시 증가하는 체력 능력치입니다.
+    speed: 5, // 중급 세트 착용 시 증가하는 이동 속도 능력치입니다.
+  ); // 중급 모험가 세트 객체 설정을 마칩니다.
 
   static const EquipmentSet master = EquipmentSet(
-    id: 'master',
-    name: '고급 모험가 세트',
-    description: '오래 달려온 사람만이 갖출 수 있는 차림.',
-    price: 12000,
-    requiredLevel: 10,
-    power: 15,
-    stamina: 15,
-    speed: 10,
-  );
+    // 고급 모험가 세트 정보를 가지는 변하지 않는 정적 상수를 선언합니다.
+    id: 'master', // 고급 세트의 고유 식별자 문자열입니다.
+    name: '고급 모험가 세트', // 화면에 표시될 고급 세트의 이름입니다.
+    description: '오래 달려온 사람만이 갖출 수 있는 차림.', // 고급 세트에 대한 설명 글입니다.
+    price: 12000, // 고급 세트의 구매 가격인 골드 수치입니다.
+    requiredLevel: 10, // 고급 세트를 착용하기 위해 필요한 최소 레벨입니다.
+    power: 15, // 고급 세트 착용 시 증가하는 공격력 능력치입니다.
+    stamina: 15, // 고급 세트 착용 시 증가하는 체력 능력치입니다.
+    speed: 10, // 고급 세트 착용 시 증가하는 이동 속도 능력치입니다.
+  ); // 고급 모험가 세트 객체 설정을 마칩니다.
 
-  // 상점에 보여주는 순서 (싼 것부터)
-  static const List<EquipmentSet> all = [novice, adept, master];
+  // 상점에 보여주는 순서 싼 것부터
+  static const List all = [
+    novice,
+    adept,
+    master,
+  ]; // 모든 장비 세트들을 가격순으로 묶어둔 정적 리스트 상수입니다.
 
   // 저장된 id로 세트를 찾습니다. 없는 id면 null입니다.
-  // (예전 버전에서 저장한 id가 남아 있어도 앱이 죽지 않도록 null을 돌려줍니다)
+  // 예전 버전에서 저장한 id가 남아 있어도 앱이 죽지 않도록 null을 돌려줍니다
   static EquipmentSet? byId(String? id) {
-    if (id == null) return null;
+    // 장비 식별자를 받아 해당 장비 객체를 찾거나 null을 반환하는 정적 메서드입니다.
+    if (id == null) return null; // 전달받은 식별자가 null이면 일치하는 장비가 없으므로 null을 반환합니다.
     for (final set in all) {
-      if (set.id == id) return set;
-    }
-    return null;
-  }
-}
+      // 준비된 전체 장비 리스트를 하나씩 순회하며 비교합니다.
+      if (set.id == id) return set; // 장비의 식별자와 전달받은 식별자가 일치하면 해당 장비 객체를 반환합니다.
+    } // 전체 리스트를 다 확인했으나 일치하는 항목이 없을 경우 순회를 마칩니다.
+    return null; // 일치하는 장비를 찾지 못했으므로 null을 반환합니다.
+  } // byId 메서드의 실행을 종료합니다.
+} // EquipmentCatalog 클래스 정의를 마칩니다.
