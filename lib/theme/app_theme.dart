@@ -73,6 +73,7 @@ class AppTheme {
 
   // 영문 소제목 (GOOD TO SEE YOU, LEVEL, MY RUNNER ...)
   static const TextStyle caption = TextStyle(
+    fontFamily: koreanFont,
     fontSize: 12,
     fontWeight: FontWeight.w800,
     letterSpacing: 2.4,
@@ -141,6 +142,9 @@ class AppTheme {
         scrolledUnderElevation: 0,
         centerTitle: false,
         titleTextStyle: TextStyle(
+          // 여기에 글꼴을 적지 않으면 화면 제목만 기본 글꼴로 나옵니다.
+          // ThemeData의 fontFamily는 textTheme에만 닿고 AppBarTheme에는 닿지 않습니다.
+          fontFamily: koreanFont,
           fontSize: 20,
           fontWeight: FontWeight.w800,
           color: AppColors.black,
