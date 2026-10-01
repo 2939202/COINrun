@@ -87,6 +87,14 @@ class AppTheme {
 
   static const TextStyle sans = TextStyle(fontFamily: sansFont);
 
+  // 홈 화면의 숫자(골드, 레벨, 누적 기록). 한글 세리프라 "3위"처럼 숫자와 한글이
+  // 한 글꼴로 이어집니다.
+  static const TextStyle serifNumber = TextStyle(
+    fontFamily: hangulSerifFont,
+    fontWeight: FontWeight.w600,
+    height: 1.0,
+  );
+
   // 영문 소제목 (GOOD TO SEE YOU, LEVEL, MY RUNNER ...)
   static const TextStyle caption = TextStyle(
     fontFamily: koreanFont,

@@ -132,7 +132,7 @@ class LevelCard extends StatelessWidget {
             children: [
               Text(
                 '${user.level}',
-                style: AppTheme.number.copyWith(
+                style: AppTheme.serifNumber.copyWith(
                   fontSize: 76,
                   color: AppColors.white,
                 ),
@@ -153,7 +153,7 @@ class LevelCard extends StatelessWidget {
                   const SizedBox(height: 1),
                   Text(
                     'Lv.${user.level + 1}',
-                    style: AppTheme.number.copyWith(
+                    style: AppTheme.serifNumber.copyWith(
                       fontSize: 26,
                       color: AppColors.white,
                     ),
@@ -267,12 +267,11 @@ class TotalsRow extends StatelessWidget {
 }
 
 // 홈 화면의 누적 기록 글자. 러닝 화면은 원래 크기와 색을 그대로 씁니다.
-const double _homeTotalSize = 30;
-const double _homeRankSize = 33;
+const double _homeTotalSize = 33;
 
 // 세 칸의 숫자 크기가 달라도 이름 줄이 같은 높이에 오도록, 숫자 자리 높이를
 // 고정하고 아래에 붙입니다.
-const double _homeNumberBox = 36;
+const double _homeNumberBox = 40;
 const double _homeNumberGap = AppSpacing.xs + 1;
 
 Widget _homeNumber(Widget child) {
@@ -325,7 +324,9 @@ class TotalBlock extends StatelessWidget {
                 alignment: Alignment.bottomLeft,
                 child: Text(
                   value,
-                  style: AppTheme.number.copyWith(fontSize: _homeTotalSize),
+                  style: AppTheme.serifNumber.copyWith(
+                    fontSize: _homeTotalSize,
+                  ),
                 ),
               ),
             )
@@ -396,21 +397,11 @@ class RankTotalState extends State<RankTotal> {
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.bottomLeft,
-                    // 숫자 글꼴에는 한글이 없어서 "위"만 한글 세리프로 씁니다.
-                    child: Text.rich(
-                      TextSpan(
-                        text: '$rank',
-                        children: [
-                          TextSpan(
-                            text: '위',
-                            style: TextStyle(
-                              fontFamily: AppTheme.hangulSerifFont,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
+                    child: Text(
+                      '$rank위',
+                      style: AppTheme.serifNumber.copyWith(
+                        fontSize: _homeTotalSize,
                       ),
-                      style: AppTheme.number.copyWith(fontSize: _homeRankSize),
                     ),
                   ),
                 ),
@@ -663,7 +654,7 @@ class GoldPill extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.xs + 1),
-          Text('$gold', style: AppTheme.number.copyWith(fontSize: 14)),
+          Text('$gold', style: AppTheme.serifNumber.copyWith(fontSize: 14)),
         ],
       ),
     );
