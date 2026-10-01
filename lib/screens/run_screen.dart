@@ -1,15 +1,15 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' hide Path;
 
 import '../game/equipment_rules.dart';
 import '../game/run_rules.dart';
 import '../game/run_tracker.dart';
+import '../models/course.dart';
 import '../models/equipment_set.dart';
 import '../models/run_record.dart';
 import '../models/user_model.dart';
@@ -19,9 +19,11 @@ import '../services/step_service.dart';
 import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
+import '../widgets/course_widgets.dart' show slideFromRight;
 import '../widgets/home_widgets.dart' show DoubleRule, TotalBlock;
 import '../widgets/gold_coin.dart';
 import '../widgets/map_tiles.dart';
+import 'course_screen.dart';
 import 'run_report.dart';
 
 // ============================================================
@@ -30,8 +32,13 @@ import 'run_report.dart';
 // 흐름: 시작 전(idle) -> 달리는 중(running) <-> 일시정지(paused) -> 완료
 //   - 완료를 누르면 UserRepository가 보상을 계산해 Firestore에 저장하고,
 //     완료 리포트를 보여줍니다.
-//   - 개발 모드(kDebugMode)에서만 밖에 나가지 않고 시험할 수 있는
-//     시뮬레이터(방향 버튼)를 켤 수 있습니다. 출시 버전에는 보이지 않습니다.
+//   - 앱바의 교환 버튼으로 코스를 고르면 지도에 코스 선이 깔립니다.
+//
+// [숨은 개발자 모드]
+//   지도 오른쪽 아래 나침반을 빠르게 6번 두드리면 켜집니다. 다시 6번이면 꺼집니다.
+//   켜지면 나침반 둘레에 방향 버튼(시뮬레이터)이 생기고 지도 위에 GPS 진단 줄이
+//   보입니다. 시연할 때 밖에 나가지 않고도 달리는 모습을 보여주려고 만든 것이라
+//   출시 빌드에서도 열립니다.
 // ============================================================
 
 enum MoveDirection { up, down, left, right }
@@ -72,6 +79,16 @@ class _RunScreenState extends State<RunScreen> {
   String? _streamError; // 스트림에서 난 오류 (화면에 그대로 띄웁니다)
   bool _usingForegroundService = false; // 포그라운드 서비스로 받고 있는지
   Timer? _watchdog; // 위치가 아예 안 들어올 때 되돌리기 위한 감시
+
+  // 고른 코스. 없으면 자유 러닝입니다.
+  Course? _course;
+
+  // 숨은 개발자 모드 (나침반 6번)
+  bool _devMode = false;
+  int _compassTaps = 0;
+  DateTime? _lastCompassTap;
+  static const int _devModeTaps = 6;
+  static const Duration _tapGap = Duration(milliseconds: 700);
 
   // 개발용 시뮬레이터
   bool _useSimulator = false;
@@ -387,6 +404,74 @@ class _RunScreenState extends State<RunScreen> {
     _onNewPosition(next);
   }
 
+  // ----------------------------------------------------------
+  // 코스
+  // ----------------------------------------------------------
+  Future<void> _openCourses() async {
+    if (_tracker.state != RunState.idle) {
+      _showMessage('달리는 중에는 코스를 바꿀 수 없어요.');
+      return;
+    }
+    final Course? course = await Navigator.push<Course>(
+      context,
+      slideFromRight(
+        CourseScreen(position: _currentPosition, selectedId: _course?.id),
+      ),
+    );
+    if (course == null || !mounted) return;
+    setState(() => _course = course);
+    _showWholeCourse(course);
+  }
+
+  void _clearCourse() {
+    setState(() => _course = null);
+    _moveMap(_position);
+  }
+
+  // 코스 전체가 화면에 들어오게 지도를 맞춥니다.
+  void _showWholeCourse(Course course) {
+    try {
+      _mapController.fitCamera(
+        CameraFit.coordinates(
+          coordinates: course.points,
+          padding: const EdgeInsets.all(48),
+        ),
+      );
+    } catch (error) {
+      debugPrint('코스 맞추기 실패: $error');
+    }
+  }
+
+  // ----------------------------------------------------------
+  // 나침반 / 숨은 개발자 모드
+  // ----------------------------------------------------------
+  // 한 번 누르면 지도를 북쪽이 위로 돌려놓고, 빠르게 6번이면 개발자 모드를 켜고 끕니다.
+  void _onCompassTap() {
+    final DateTime now = DateTime.now();
+    final DateTime? last = _lastCompassTap;
+    if (last == null || now.difference(last) > _tapGap) _compassTaps = 0;
+    _lastCompassTap = now;
+    _compassTaps += 1;
+
+    if (_compassTaps == 1) {
+      try {
+        _mapController.rotate(0);
+      } catch (_) {}
+    }
+    if (_compassTaps >= _devModeTaps) {
+      _compassTaps = 0;
+      _toggleDevMode();
+    }
+  }
+
+  void _toggleDevMode() {
+    final bool turningOn = !_devMode;
+    setState(() => _devMode = turningOn);
+    // 방향 버튼이 보이면 위치도 방향 버튼으로 움직여야 합니다.
+    if (turningOn != _useSimulator) _toggleSimulator();
+    _showMessage(turningOn ? '개발자 모드를 켰어요.' : '개발자 모드를 껐어요.');
+  }
+
   void _showMessage(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -409,14 +494,8 @@ class _RunScreenState extends State<RunScreen> {
           title: const Text('러닝'),
           actions: [
             _UserBadge(userId: widget.userId),
-            if (kDebugMode)
-              IconButton(
-                tooltip: '시뮬레이터 (개발용)',
-                onPressed: _toggleSimulator,
-                icon: Icon(
-                  _useSimulator ? Icons.gamepad : Icons.gamepad_outlined,
-                ),
-              ),
+            const SizedBox(width: AppSpacing.sm),
+            _CourseButton(onTap: _openCourses),
             const SizedBox(width: AppSpacing.md),
           ],
         ),
@@ -424,17 +503,25 @@ class _RunScreenState extends State<RunScreen> {
         //
         // 기종에 따라 제스처 바나 내비게이션 바가 버튼을 덮는 일이 있어서,
         // SafeArea가 잡아주는 여백에 더해 최소 여백을 따로 줍니다.
+        //
+        // 아래 패널은 내용만큼만 높이를 쓰고, 지도가 나머지를 전부 가져갑니다.
+        // 그래야 보통 기종에서는 패널을 스크롤할 일이 없습니다. 화면이 아주 작은
+        // 기종에서만 패널이 화면의 62%에서 멈추고 숫자 부분이 스크롤됩니다.
         body: SafeArea(
           top: false,
           bottom: false,
-          child: Column(
-            children: [
-              Expanded(
-                flex: 60,
-                child: SafeArea(bottom: false, child: _buildMap()),
-              ),
-              Expanded(flex: 40, child: _buildPanel()),
-            ],
+          child: LayoutBuilder(
+            builder: (context, constraints) => Column(
+              children: [
+                Expanded(child: SafeArea(bottom: false, child: _buildMap())),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: constraints.maxHeight * 0.62,
+                  ),
+                  child: _buildPanel(),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -453,6 +540,35 @@ class _RunScreenState extends State<RunScreen> {
           ),
           children: [
             ...MapTiles.layers(),
+            // 고른 코스는 내 경로 밑에 굵고 옅게 깔아 둡니다. 그 위를 따라 달리면
+            // 검은 내 경로가 코스를 덮어가며 그려집니다.
+            if (_course != null) ...[
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: _course!.points,
+                    strokeWidth: 9,
+                    color: AppColors.black.withValues(alpha: 0.18),
+                  ),
+                ],
+              ),
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: _course!.points.last,
+                    width: 22,
+                    height: 22,
+                    child: const _CourseFlag(finish: true),
+                  ),
+                  Marker(
+                    point: _course!.points.first,
+                    width: 22,
+                    height: 22,
+                    child: const _CourseFlag(finish: false),
+                  ),
+                ],
+              ),
+            ],
             PolylineLayer(
               polylines: [
                 // 토막마다 따로 긋습니다. 신호가 끊겼던 구간이 직선으로 이어지지 않습니다.
@@ -460,11 +576,12 @@ class _RunScreenState extends State<RunScreen> {
                   if (segment.length >= 2)
                     Polyline(
                       points: segment,
-                      strokeWidth: 3.5,
-                      // 지도 도로선과 섞이지 않도록 형광색에 검은 테두리를 둘러 그립니다.
-                      color: AppColors.accent,
+                      strokeWidth: 4,
+                      // 색을 뺀 지도 위라 먹색 선이 가장 또렷합니다. 어두운 길 위에서도
+                      // 묻히지 않게 바깥에 흰 테두리를 얇게 두릅니다.
+                      color: AppColors.black,
                       borderStrokeWidth: 1.5,
-                      borderColor: AppColors.black,
+                      borderColor: AppColors.white,
                     ),
               ],
             ),
@@ -481,7 +598,7 @@ class _RunScreenState extends State<RunScreen> {
           ],
         ),
         // 진단 줄은 지도 위에 얹습니다. 아래 패널에 넣으면 화면이 좁아서 잘립니다.
-        if (kDebugMode)
+        if (_devMode)
           Positioned(
             left: AppSpacing.sm,
             top: AppSpacing.sm,
@@ -500,15 +617,28 @@ class _RunScreenState extends State<RunScreen> {
               hasFix: _currentPosition != null,
             ),
           ),
-        if (_useSimulator)
+        if (_course != null)
           Positioned(
-            right: AppSpacing.md,
+            left: AppSpacing.md,
             bottom: AppSpacing.md,
-            child: _SimulatorPad(
-              onPressStart: _startSimulatorMove,
-              onPressEnd: _stopSimulatorMove,
-            ),
+            right: _devMode ? 160 : 72,
+            child: _CourseChip(course: _course!, onClear: _clearCourse),
           ),
+        // 나침반. 개발자 모드에서는 방향 버튼 한가운데로 들어갑니다.
+        Positioned(
+          right: AppSpacing.md,
+          bottom: AppSpacing.md,
+          child: _devMode
+              ? _SimulatorPad(
+                  onPressStart: _startSimulatorMove,
+                  onPressEnd: _stopSimulatorMove,
+                  center: _Compass(
+                    controller: _mapController,
+                    onTap: _onCompassTap,
+                  ),
+                )
+              : _Compass(controller: _mapController, onTap: _onCompassTap),
+        ),
       ],
     );
   }
@@ -527,13 +657,14 @@ class _RunScreenState extends State<RunScreen> {
         AppSpacing.md,
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           // 숫자들은 자리가 모자라면 스크롤되게 둡니다.
           //
           // 예전에는 여기가 전부 한 Column이어서, 화면이 작은 기종에서는 내용이
           // 패널 높이를 넘어가고 넘친 만큼 아래로 삐져나가 버튼이 내비게이션 바에
           // 가려졌습니다. 버튼을 바깥에 따로 두면 그럴 수가 없습니다.
-          Expanded(
+          Flexible(
             child: SingleChildScrollView(
               child: Column(
                 children: [
@@ -963,12 +1094,181 @@ class _PositionDot extends StatelessWidget {
   }
 }
 
+// 앱바의 코스 고르기 버튼. 검은 네모에 흰 교환 아이콘
+class _CourseButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _CourseButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: '코스 고르기',
+      child: Material(
+        color: AppColors.black,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: const SizedBox(
+            width: 36,
+            height: 36,
+            child: Icon(Icons.swap_horiz, color: AppColors.white, size: 22),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// 지도 위 코스 출발(흰 점)/도착(검은 점)
+class _CourseFlag extends StatelessWidget {
+  final bool finish;
+
+  const _CourseFlag({required this.finish});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: finish ? AppColors.black : AppColors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: AppColors.black, width: 2),
+      ),
+      child: Icon(
+        finish ? Icons.flag : Icons.play_arrow,
+        size: 12,
+        color: finish ? AppColors.white : AppColors.black,
+      ),
+    );
+  }
+}
+
+// 지도 왼쪽 아래: 지금 고른 코스 이름과 지우기
+class _CourseChip extends StatelessWidget {
+  final Course course;
+  final VoidCallback onClear;
+
+  const _CourseChip({required this.course, required this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.bottomLeft,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md - 4,
+          AppSpacing.xs,
+          AppSpacing.xs,
+          AppSpacing.xs,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.black,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                '${course.name} · ${formatKm(course.distanceMeters)}km',
+                overflow: TextOverflow.ellipsis,
+                style: AppTheme.sans.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.white,
+                ),
+              ),
+            ),
+            GestureDetector(
+              onTap: onClear,
+              child: const Padding(
+                padding: EdgeInsets.all(AppSpacing.xs),
+                child: Icon(Icons.close, size: 16, color: AppColors.sandOnDark),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// 나침반. 지도를 돌리면 같이 돌아서 바늘이 늘 북쪽을 가리킵니다.
+class _Compass extends StatelessWidget {
+  final MapController controller;
+  final VoidCallback onTap;
+
+  const _Compass({required this.controller, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          shape: BoxShape.circle,
+          border: Border.all(color: AppColors.black, width: 1.4),
+        ),
+        child: StreamBuilder<MapEvent>(
+          stream: controller.mapEventStream,
+          builder: (context, snapshot) {
+            final double rotation = snapshot.data?.camera.rotationRad ?? 0;
+            return Transform.rotate(
+              angle: rotation,
+              child: CustomPaint(painter: _NeedlePainter()),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+// 위쪽 검은 바늘(북) + 아래쪽 옅은 바늘(남)
+class _NeedlePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Offset c = size.center(Offset.zero);
+    const double length = 13;
+    const double half = 4.5;
+    final Path north = Path()
+      ..moveTo(c.dx, c.dy - length)
+      ..lineTo(c.dx + half, c.dy)
+      ..lineTo(c.dx - half, c.dy)
+      ..close();
+    final Path south = Path()
+      ..moveTo(c.dx, c.dy + length)
+      ..lineTo(c.dx + half, c.dy)
+      ..lineTo(c.dx - half, c.dy)
+      ..close();
+    canvas.drawPath(south, Paint()..color = AppColors.sand);
+    canvas.drawPath(north, Paint()..color = AppColors.black);
+    canvas.drawCircle(c, 1.6, Paint()..color = AppColors.white);
+  }
+
+  @override
+  bool shouldRepaint(_NeedlePainter oldDelegate) => false;
+}
+
 // 개발용 방향 버튼 (누르고 있는 동안 계속 이동)
 class _SimulatorPad extends StatelessWidget {
   final void Function(MoveDirection) onPressStart;
   final VoidCallback onPressEnd;
 
-  const _SimulatorPad({required this.onPressStart, required this.onPressEnd});
+  // 가운데 빈칸에 넣을 것 (나침반)
+  final Widget center;
+
+  const _SimulatorPad({
+    required this.onPressStart,
+    required this.onPressEnd,
+    required this.center,
+  });
 
   Widget _button(IconData icon, MoveDirection direction) {
     return GestureDetector(
@@ -998,7 +1298,7 @@ class _SimulatorPad extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             _button(Icons.keyboard_arrow_left, MoveDirection.left),
-            const SizedBox(width: 44),
+            SizedBox(width: 48, height: 48, child: Center(child: center)),
             _button(Icons.keyboard_arrow_right, MoveDirection.right),
           ],
         ),

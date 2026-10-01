@@ -41,6 +41,19 @@ service cloud.firestore {
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // 사설 코스
+    //   읽기: 로그인한 사람은 누구나 (남이 만든 코스를 달려야 하므로)
+    //   만들기: 자기 이름(authorId)으로만
+    //   고치기/지우기: 만든 사람만
+    //   하트 수는 아직 앱에서 올리지 않습니다. 하트 기능을 붙일 때 규칙을 다시 봅니다.
+    match /courses/{courseId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if request.auth != null
+        && resource.data.authorId == request.auth.uid;
+    }
+
     // 위에서 허용하지 않은 모든 접근은 막습니다.
     match /{document=**} {
       allow read, write: if false;

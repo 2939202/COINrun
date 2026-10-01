@@ -45,6 +45,7 @@ flutter:
   assets:
     - assets/models/ # 캐릭터 3D 모델
     - assets/character/ # 캐릭터 2D 이미지
+    - assets/geo/ # 서울 구 경계선 (지금 위치의 구 찾기)
   uses-material-design: true
 
   fonts:

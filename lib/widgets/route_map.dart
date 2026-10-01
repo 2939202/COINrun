@@ -53,11 +53,11 @@ class RouteMap extends StatelessWidget {
             for (final segment in drawable)
               Polyline(
                 points: segment,
-                strokeWidth: 3,
-                // 지도 도로선과 섞이지 않도록 형광색에 검은 테두리를 둘러 그립니다.
-                color: AppColors.accent,
+                strokeWidth: 3.5,
+                // 러닝 화면과 같은 선: 먹색에 얇은 흰 테두리
+                color: AppColors.black,
                 borderStrokeWidth: 1.5,
-                borderColor: AppColors.black,
+                borderColor: AppColors.white,
               ),
           ],
         ),
