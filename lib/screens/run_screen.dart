@@ -20,8 +20,8 @@ import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/home_widgets.dart' show DoubleRule, TotalBlock;
+import '../widgets/gold_coin.dart';
 import '../widgets/map_tiles.dart';
-import '../widgets/notched_box.dart';
 import 'run_report.dart';
 
 // ============================================================
@@ -430,10 +430,10 @@ class _RunScreenState extends State<RunScreen> {
           child: Column(
             children: [
               Expanded(
-                flex: 52,
+                flex: 60,
                 child: SafeArea(bottom: false, child: _buildMap()),
               ),
-              Expanded(flex: 48, child: _buildPanel()),
+              Expanded(flex: 40, child: _buildPanel()),
             ],
           ),
         ),
@@ -478,7 +478,6 @@ class _RunScreenState extends State<RunScreen> {
                 ),
               ],
             ),
-            MapTiles.attribution(),
           ],
         ),
         // 진단 줄은 지도 위에 얹습니다. 아래 패널에 넣으면 화면이 좁아서 잘립니다.
@@ -523,9 +522,9 @@ class _RunScreenState extends State<RunScreen> {
       // 이게 없으면 제스처 바 위에 버튼이 바싹 붙거나 가려집니다.
       minimum: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
+        AppSpacing.md,
         AppSpacing.lg,
-        AppSpacing.lg,
-        AppSpacing.lg,
+        AppSpacing.md,
       ),
       child: Column(
         children: [
@@ -541,16 +540,16 @@ class _RunScreenState extends State<RunScreen> {
                   // 메인 숫자: 러닝 시간
                   Text(
                     formatDuration(record.elapsed),
-                    style: AppTheme.number.copyWith(fontSize: 62),
+                    style: AppTheme.number.copyWith(fontSize: 52),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text('ELAPSED TIME', style: AppTheme.caption),
-                  const SizedBox(height: AppSpacing.lg),
+                  const SizedBox(height: AppSpacing.md),
 
                   const DoubleRule(),
                   Padding(
                     padding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.md,
+                      vertical: AppSpacing.sm + 2,
                     ),
                     child: IntrinsicHeight(
                       child: Row(
@@ -591,13 +590,13 @@ class _RunScreenState extends State<RunScreen> {
                   ),
                   const DoubleRule(),
 
-                  const SizedBox(height: AppSpacing.lg),
+                  const SizedBox(height: AppSpacing.md),
                   _RewardPreview(userId: widget.userId, record: record),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: AppSpacing.sm + 4),
           _buildControls(),
         ],
       ),
@@ -665,7 +664,7 @@ class _RunScreenState extends State<RunScreen> {
 // 작은 위젯들
 // ------------------------------------------------------------
 
-// 러닝 화면 아래 버튼. 모서리가 잘린 모양을 홈의 "러닝 시작"과 맞춥니다.
+// 러닝 화면 아래 버튼. 홈의 "시작" 버튼과 같은 둥근 모양입니다.
 class _RunButton extends StatelessWidget {
   final String label;
   final IconData? icon;
@@ -700,15 +699,36 @@ class _RunButton extends StatelessWidget {
       ],
     );
 
-    return NotchedBox(
-      cut: 14,
+    // 검은 버튼은 안쪽에 흰 테두리를 한 겹, 흰 버튼은 바깥에 검은 테두리를 그립니다.
+    // 두 버튼의 높이가 같도록 흰 버튼은 그만큼 안쪽 여백을 더 줍니다.
+    return Material(
       color: background,
-      // 검은 버튼은 흰 테두리, 흰 버튼은 검은 테두리를 안쪽에 한 겹 그립니다.
-      innerBorderColor: filled ? AppColors.white : AppColors.black,
-      innerBorderInset: filled ? 6 : 0,
-      onTap: onTap,
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md + 2),
-      child: body,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        side: filled
+            ? BorderSide.none
+            : const BorderSide(color: AppColors.black, width: 1.4),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: filled
+            ? Container(
+                margin: const EdgeInsets.all(6),
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.white, width: 1.2),
+                  borderRadius: BorderRadius.circular(AppRadius.md - 6),
+                ),
+                child: body,
+              )
+            : Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: AppSpacing.md + 6,
+                ),
+                child: body,
+              ),
+      ),
     );
   }
 }
@@ -738,7 +758,7 @@ class _RewardPreviewState extends State<_RewardPreview> {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
-        vertical: AppSpacing.md - 2,
+        vertical: AppSpacing.sm + 2,
       ),
       decoration: BoxDecoration(
         color: AppColors.cream,
@@ -756,10 +776,16 @@ class _RewardPreviewState extends State<_RewardPreview> {
               final EquipmentSet? gear = user == null
                   ? null
                   : EquipmentRules.equippedSet(user);
-              return Text(
-                '+${RunRules.expFor(record, gear: gear)} EXP  ·  '
-                '+${RunRules.goldFor(record, gear: gear)} G',
-                style: textTheme.titleMedium,
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '+${RunRules.expFor(record, gear: gear)} EXP  ·  '
+                    '+${RunRules.goldFor(record, gear: gear)} ',
+                    style: textTheme.titleMedium,
+                  ),
+                  const GoldCoin(size: 16),
+                ],
               );
             },
           ),
@@ -895,6 +921,9 @@ class _UserBadgeState extends State<_UserBadge> {
       builder: (context, snapshot) {
         final UserModel? user = snapshot.data;
         if (user == null) return const SizedBox.shrink();
+        final TextStyle? style = Theme.of(
+          context,
+        ).textTheme.labelLarge?.copyWith(fontSize: 13);
         return Container(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md,
@@ -904,11 +933,13 @@ class _UserBadgeState extends State<_UserBadge> {
             color: AppColors.cream,
             borderRadius: BorderRadius.circular(AppRadius.pill),
           ),
-          child: Text(
-            'Lv.${user.level} · ${user.gold} G',
-            style: Theme.of(
-              context,
-            ).textTheme.labelLarge?.copyWith(fontSize: 13),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Lv.${user.level} · ', style: style),
+              const GoldCoin(size: 15),
+              Text(' ${user.gold}', style: style),
+            ],
           ),
         );
       },

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/run_log.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
+import 'gold_coin.dart';
 
 // 목록에서 기록을 치웠을 때 어떻게 치웠는지
 enum RunRemoval {
@@ -150,7 +151,8 @@ class RunLogTile extends StatelessWidget {
                 ],
               ),
             ),
-            Text('+${run.goldEarned} G', style: textTheme.titleMedium),
+            Text('+${run.goldEarned} ', style: textTheme.titleMedium),
+            const GoldCoin(size: 16),
             const SizedBox(width: AppSpacing.xs),
             const Icon(Icons.chevron_right, size: 20, color: AppColors.mute),
           ],

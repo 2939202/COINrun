@@ -6,6 +6,7 @@ import '../game/run_rules.dart';
 import '../models/equipment_set.dart';
 import '../models/user_model.dart';
 import '../theme/app_theme.dart';
+import '../widgets/gold_coin.dart';
 import '../widgets/notched_box.dart';
 import '../widgets/runner_figure.dart';
 import '../widgets/segment_bar.dart';
@@ -316,27 +317,9 @@ class _GoldChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 20,
-            height: 20,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.cream,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.gold, width: 1.6),
-            ),
-            child: Text(
-              'G',
-              style: AppTheme.number.copyWith(
-                fontSize: 10,
-                color: AppColors.gold,
-              ),
-            ),
-          ),
+          const GoldCoin(size: 20),
           const SizedBox(width: AppSpacing.sm - 2),
           Text('$gold', style: AppTheme.number.copyWith(fontSize: 16)),
-          const SizedBox(width: 2),
-          Text('G', style: Theme.of(context).textTheme.labelMedium),
         ],
       ),
     );

@@ -6,6 +6,7 @@ import '../models/equipment_set.dart';
 import '../models/user_model.dart';
 import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/gold_coin.dart';
 
 // ============================================================
 // 잡화점 - 장비 세트를 사고 갈아입는 화면
@@ -272,7 +273,7 @@ class _SetCard extends StatelessWidget {
 
           Row(
             children: [
-              _Coin(),
+              const GoldCoin(size: 22),
               const SizedBox(width: AppSpacing.sm),
               Text(
                 formatGold(set.price),
@@ -385,26 +386,6 @@ class _StatChip extends StatelessWidget {
   }
 }
 
-class _Coin extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 22,
-      height: 22,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: AppColors.cream,
-        shape: BoxShape.circle,
-        border: Border.all(color: AppColors.gold, width: 1.6),
-      ),
-      child: Text(
-        'G',
-        style: AppTheme.number.copyWith(fontSize: 11, color: AppColors.gold),
-      ),
-    );
-  }
-}
-
 class _ActionButton extends StatelessWidget {
   final bool isEquipped;
   final bool owned;
@@ -489,11 +470,9 @@ class _GoldChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _Coin(),
+          const GoldCoin(size: 22),
           const SizedBox(width: AppSpacing.sm - 2),
           Text('$gold', style: AppTheme.number.copyWith(fontSize: 16)),
-          const SizedBox(width: 2),
-          Text('G', style: Theme.of(context).textTheme.labelMedium),
         ],
       ),
     );

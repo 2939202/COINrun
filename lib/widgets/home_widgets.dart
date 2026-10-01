@@ -7,6 +7,7 @@ import '../models/user_model.dart';
 import '../services/ranking_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
+import 'gold_coin.dart';
 import 'notched_box.dart';
 import 'segment_bar.dart';
 import 'runner_figure.dart';
@@ -653,23 +654,7 @@ class GoldPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 17,
-            height: 17,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.cream,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.gold, width: 1.3),
-            ),
-            child: Text(
-              'G',
-              style: AppTheme.number.copyWith(
-                fontSize: 9,
-                color: AppColors.gold,
-              ),
-            ),
-          ),
+          const GoldCoin(),
           const SizedBox(width: AppSpacing.xs + 1),
           Text('$gold', style: AppTheme.serifNumber.copyWith(fontSize: 14)),
         ],
