@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 
+import '../game/course_coins.dart';
 import '../game/equipment_catalog.dart';
 import '../game/equipment_rules.dart';
 import '../game/route_simplifier.dart';
@@ -423,8 +424,14 @@ class UserRepository {
   // 러닝 완료 시 호출: 보상을 계산해서 유저 문서에 더하고, 러닝 기록도 남깁니다.
   // 트랜잭션을 쓰는 이유: 읽고 -> 계산하고 -> 쓰는 사이에 다른 곳에서 값이 바뀌어도
   // 골드가 덮어써져 사라지지 않도록 하기 위해서입니다.
-  Future<RunReward> saveRun(String userId, RunRecord run) async {
-    final RunReward reward = await _saveRunInTransaction(userId, run);
+  //
+  // course: 코스 러닝이었으면 먹은 코인. 이때 골드는 코인으로만 줍니다.
+  Future<RunReward> saveRun(
+    String userId,
+    RunRecord run, {
+    CourseResult? course,
+  }) async {
+    final RunReward reward = await _saveRunInTransaction(userId, run, course);
 
     // 오래된 기록 정리는 보상 저장과 따로 합니다.
     // 정리하다 실패해도 이미 받은 보상이 사라지면 안 되기 때문입니다.
@@ -463,7 +470,11 @@ class UserRepository {
     await batch.commit();
   }
 
-  Future<RunReward> _saveRunInTransaction(String userId, RunRecord run) {
+  Future<RunReward> _saveRunInTransaction(
+    String userId,
+    RunRecord run,
+    CourseResult? course,
+  ) {
     final userDoc = _userDoc(userId);
 
     return _firestore.runTransaction((transaction) async {
@@ -472,7 +483,9 @@ class UserRepository {
 
       // 러닝을 마친 시점에 입고 있던 장비 세트의 보너스를 얹어줍니다.
       final EquipmentSet? gear = EquipmentRules.equippedSet(user);
-      final int gold = RunRules.goldFor(run, gear: gear);
+      final int gold = course == null
+          ? RunRules.goldFor(run, gear: gear)
+          : RunRules.courseGoldFor(course.gold, gear: gear);
       final int exp = RunRules.expFor(run, gear: gear);
       final next = RunRules.addExp(user.level, user.exp, exp);
 
@@ -530,6 +543,13 @@ class UserRepository {
         'goldEarned': gold,
         'expEarned': exp,
         'gearSetId': gear?.id, // 어떤 장비를 입고 뛰었는지 (나중에 기록 화면에서 사용)
+        // 코스 러닝이면 어느 코스에서 코인을 몇 개 먹었는지
+        if (course != null) ...{
+          'courseId': course.courseId,
+          'coinsCollected': course.coinsCollected,
+          'coinsTotal': course.coinsTotal,
+          'courseCompleted': course.completed,
+        },
         'hidden': false,
         'createdAt': FieldValue.serverTimestamp(),
       });

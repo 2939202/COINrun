@@ -11,7 +11,7 @@ import '../utils/formatters.dart';
 // 코스 화면을 이루는 조각들
 //   CourseCard        - 정사각형 코스 카드 (한 줄에 세 장)
 //   CourseSectionHead - "CLASSIC / 클래식 코스 ... 전체보기"
-//   TearLine          - 클래식과 사설 사이의 절취선
+//   TearLine          - 클래식과 사설 사이의 절취선 (점선)
 // ============================================================
 
 // 한 줄에 놓는 카드 수. 클래식 9장 = 3줄, 사설 3장 = 1줄
@@ -272,23 +272,15 @@ class CourseSectionHead extends StatelessWidget {
   }
 }
 
-// 절취선. 왼쪽에 가위, 그 뒤로 점선이 끝까지 이어집니다.
+// 절취선. 점선이 끝에서 끝까지 이어집니다.
 class TearLine extends StatelessWidget {
   const TearLine({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Icon(Icons.content_cut, size: 15, color: AppColors.label),
-        const SizedBox(width: AppSpacing.xs),
-        Expanded(
-          child: CustomPaint(
-            size: const Size.fromHeight(1.4),
-            painter: _DashLinePainter(),
-          ),
-        ),
-      ],
+    return CustomPaint(
+      size: const Size.fromHeight(1.4),
+      painter: _DashLinePainter(),
     );
   }
 }

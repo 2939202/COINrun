@@ -47,6 +47,12 @@ class RunRules {
     return EquipmentRules.applyGoldBonus(base, gear);
   }
 
+  // 코스 러닝은 걸음이 아니라 먹은 코인으로 골드를 줍니다. (game/course_coins.dart)
+  // 걸음 골드와 같이 주면 두 번 쌓이므로 둘 중 하나만 씁니다.
+  static int courseGoldFor(int coinGold, {EquipmentSet? gear}) {
+    return EquipmentRules.applyGoldBonus(coinGold, gear);
+  }
+
   // 다음 레벨까지 필요한 경험치
   static int expToNextLevel(int level) => level * 100;
 

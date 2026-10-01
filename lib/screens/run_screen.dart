@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' hide Path;
+import 'package:vibration/vibration.dart';
 
+import '../game/course_coins.dart';
 import '../game/equipment_rules.dart';
 import '../game/run_rules.dart';
 import '../game/run_tracker.dart';
@@ -23,6 +26,7 @@ import '../widgets/course_widgets.dart' show slideFromRight;
 import '../widgets/home_widgets.dart' show DoubleRule, TotalBlock;
 import '../widgets/gold_coin.dart';
 import '../widgets/map_tiles.dart';
+import '../widgets/run_app_bar.dart';
 import 'course_screen.dart';
 import 'run_report.dart';
 
@@ -32,7 +36,14 @@ import 'run_report.dart';
 // 흐름: 시작 전(idle) -> 달리는 중(running) <-> 일시정지(paused) -> 완료
 //   - 완료를 누르면 UserRepository가 보상을 계산해 Firestore에 저장하고,
 //     완료 리포트를 보여줍니다.
-//   - 앱바의 교환 버튼으로 코스를 고르면 지도에 코스 선이 깔립니다.
+//   - 코스 러닝은 걸음 대신 코스 위 코인으로 골드를 줍니다. (game/course_coins.dart)
+//   - 이 화면은 두 얼굴을 가집니다. 코스 없이 열면 "러닝", 코스를 들고 열면
+//     "코스 러닝"입니다. 앱바의 ⇄로 러닝 <-> 코스 러닝(코스 고르기)을 오가고,
+//     ←는 언제나 홈으로 나갑니다. 오가는 화면은 쌓지 않고 바꿔 끼웁니다.
+//
+// [알림]
+//   알림창의 "달리는 중" 알림은 시작을 누른 뒤부터 완료할 때까지만 뜹니다.
+//   시작 전에는 포그라운드 서비스 없이 위치만 받아 지도에 내 자리를 찍습니다.
 //
 // [숨은 개발자 모드]
 //   지도 오른쪽 아래 나침반을 빠르게 6번 두드리면 켜집니다. 다시 6번이면 꺼집니다.
@@ -46,7 +57,10 @@ enum MoveDirection { up, down, left, right }
 class RunScreen extends StatefulWidget {
   final String userId;
 
-  const RunScreen({super.key, required this.userId});
+  // 코스 러닝이면 그 코스. null이면 자유 러닝
+  final Course? course;
+
+  const RunScreen({super.key, required this.userId, this.course});
 
   @override
   State<RunScreen> createState() => _RunScreenState();
@@ -81,7 +95,18 @@ class _RunScreenState extends State<RunScreen> {
   Timer? _watchdog; // 위치가 아예 안 들어올 때 되돌리기 위한 감시
 
   // 고른 코스. 없으면 자유 러닝입니다.
-  Course? _course;
+  Course? get _course => widget.course;
+
+  // 코스 위 코인. 시작 전에도 지도에 보이고, 시작할 때 새로 깝니다.
+  late CourseCoins? _coins = _freshCoins();
+
+  CourseCoins? _freshCoins() {
+    final Course? course = _course;
+    return course == null ? null : CourseCoins.forCourse(course);
+  }
+
+  // 출발점에서 이보다 멀리서 시작하면 알려줍니다. 코인을 하나도 못 먹으니까요.
+  static const double _farFromCourseMeters = 300;
 
   // 숨은 개발자 모드 (나침반 6번)
   bool _devMode = false;
@@ -100,11 +125,11 @@ class _RunScreenState extends State<RunScreen> {
   @override
   void initState() {
     super.initState();
-    // 스트림은 이 화면에 들어올 때 딱 한 번, 포그라운드 설정을 넣어서 엽니다.
+    // 들어올 때는 알림 없이 위치만 받습니다. 시작을 누르면 알림을 붙여 다시 엽니다.
     //
-    // 시작을 누를 때 다시 여는 방식은 쓰지 않습니다. geolocator는 이미 열린 스트림이
-    // 있으면 새 설정을 무시하고 그걸 돌려주기 때문에(geolocator_android.dart:167),
-    // 두 번 여는 순간 설정이 먹었는지 안 먹었는지 알 수 없게 됩니다.
+    // geolocator는 이미 열린 스트림이 있으면 새 설정을 무시하고 그걸 돌려줍니다
+    // (geolocator_android.dart:167). 그래서 다시 열 때는 _startGps가 먼저 기존
+    // 구독을 끊어 스트림을 닫은 뒤 새 설정으로 엽니다.
     _prepare();
   }
 
@@ -139,7 +164,7 @@ class _RunScreenState extends State<RunScreen> {
     await _showLastKnownPosition();
     if (!mounted) return;
 
-    await _startGps();
+    await _startGps(withForegroundService: false);
     if (!mounted) return;
 
     await _startStepSensor();
@@ -161,7 +186,11 @@ class _RunScreenState extends State<RunScreen> {
   //
   // withForegroundService를 켜면 알림창에 알림이 하나 뜨고, 그게 떠 있는 동안
   // 화면을 꺼도 위치가 계속 들어옵니다. 이게 없으면 안드로이드가 전달을 끊습니다.
-  Future<void> _startGps({bool withForegroundService = true}) async {
+  //
+  // withForegroundService를 안 주면 지금 러닝 중인지로 정합니다.
+  Future<void> _startGps({bool? withForegroundService}) async {
+    final bool foreground =
+        withForegroundService ?? _tracker.state != RunState.idle;
     final String? error = await LocationService.ensurePermission();
     if (error != null) {
       if (mounted) setState(() => _streamError = error);
@@ -174,13 +203,13 @@ class _RunScreenState extends State<RunScreen> {
     _positionSubscription = null;
 
     setState(() {
-      _usingForegroundService = withForegroundService;
+      _usingForegroundService = foreground;
       _streamError = null;
     });
 
     _positionSubscription =
         LocationService.positionStream(
-          keepAliveInBackground: withForegroundService,
+          keepAliveInBackground: foreground,
         ).listen(
           (position) {
             if (!mounted) return;
@@ -204,7 +233,7 @@ class _RunScreenState extends State<RunScreen> {
           },
         );
 
-    _startWatchdog(withForegroundService);
+    _startWatchdog(foreground);
   }
 
   // 포그라운드 서비스를 붙였는데 위치가 하나도 안 들어오면, 서비스가 시작에 실패한 것입니다.
@@ -227,6 +256,44 @@ class _RunScreenState extends State<RunScreen> {
       _tracker.addPosition(newPosition, DateTime.now());
     });
     _moveMap(newPosition);
+    _checkCoins(newPosition);
+  }
+
+  // 달리는 중에만 코인을 먹습니다. 일시정지 중에 걸어가서 먹으면 안 됩니다.
+  void _checkCoins(LatLng position) {
+    final CourseCoins? coins = _coins;
+    if (coins == null || _tracker.state != RunState.running) return;
+
+    final bool wasAll = coins.allCollected;
+    final CoinUpdate update = coins.update(position);
+    if (update.isEmpty) return;
+    setState(() {}); // 먹은 코인을 지도에서 지웁니다.
+
+    if (update.collected > 0) {
+      _buzz(const [0, 90]);
+    } else if (update.passed > 0) {
+      // 왕복 코스의 가는 길: 아직 못 먹는다는 뜻으로 짧게 두 번
+      _buzz(const [0, 35, 70, 35]);
+    }
+    if (update.turned) {
+      _buzz(const [0, 250]);
+      _showMessage('반환점! 이제 돌아오면서 코인을 먹어요.');
+    }
+    if (!wasAll && coins.allCollected) {
+      _buzz(const [0, 120, 80, 120, 80, 260]);
+      _showMessage('코인을 다 먹었어요! 골드 ${coins.completionBonus}배');
+    }
+  }
+
+  // 진동이 없는 기종에서는 조용히 넘어갑니다.
+  Future<void> _buzz(List<int> pattern) async {
+    try {
+      if (await Vibration.hasVibrator()) {
+        await Vibration.vibrate(pattern: pattern);
+      }
+    } catch (error) {
+      debugPrint('진동 실패: $error');
+    }
   }
 
   // 내 위치를 화면 가운데에 둡니다. 배율은 지금 화면에 맞춰진 값을 그대로 씁니다.
@@ -235,7 +302,10 @@ class _RunScreenState extends State<RunScreen> {
   //
   // 지도 조작이 실패해도 기록은 계속돼야 합니다. 화면을 끈 동안에는 지도가 그려지지
   // 않는데, 그때 오류가 나서 거리와 경로까지 멈추면 안 됩니다.
+  //
+  // 코스 러닝은 시작 전까지 코스 전체를 보여줘야 해서 따라가지 않습니다.
   void _moveMap(LatLng position) {
+    if (_course != null && _tracker.state == RunState.idle) return;
     try {
       _mapController.move(position, _currentZoom);
     } catch (error) {
@@ -277,8 +347,13 @@ class _RunScreenState extends State<RunScreen> {
       // 아직 GPS를 못 잡았으면 null을 넘깁니다. 기본 좌표(서울 시청)를 출발점으로 쓰면
       // 첫 위치가 들어올 때 거기까지가 한 번에 뛴 것으로 계산돼 통째로 버려집니다.
       _tracker.start(_currentPosition, DateTime.now());
+      _coins = _freshCoins();
     });
     _startUiTimer();
+    _warnIfFarFromCourse();
+    _moveMap(_position); // 코스 전체를 보던 지도를 내 자리로
+    // 이제부터 화면을 꺼도 기록되도록 알림(포그라운드 서비스)을 붙입니다.
+    _startGps(withForegroundService: true);
   }
 
   void _pause() {
@@ -299,16 +374,24 @@ class _RunScreenState extends State<RunScreen> {
 
     setState(() => _isSaving = true);
     try {
+      final Course? course = _course;
+      final CourseCoins? coins = _coins;
       final RunReward reward = await UserRepository.instance.saveRun(
         widget.userId,
         record,
+        course: course == null || coins == null
+            ? null
+            : CourseResult.of(course.id, coins),
       );
       if (!mounted) return;
 
       setState(() {
         _isSaving = false;
         _tracker.reset();
+        _coins = _freshCoins();
       });
+      // 다 달렸으니 알림을 내립니다.
+      _startGps(withForegroundService: false);
       showRunReport(context, record, reward);
     } catch (e) {
       // 저장에 실패하면 기록을 그대로 두고 일시정지 상태로 두어 다시 시도할 수 있게 합니다.
@@ -363,7 +446,12 @@ class _RunScreenState extends State<RunScreen> {
       setState(() {
         _useSimulator = true;
         _tracker.disableStepSensor();
-        _currentPosition ??= _defaultPosition;
+        // 코스 러닝이면 출발점에 세워서, 방향 버튼으로 바로 코스를 따라갈 수 있게 합니다.
+        // 달리는 중에 옮기면 순간이동한 것처럼 기록되므로 시작 전에만 그렇게 합니다.
+        final LatLng? courseStart = _tracker.state == RunState.idle
+            ? _course?.points.first
+            : null;
+        _currentPosition = courseStart ?? _currentPosition ?? _defaultPosition;
       });
     } else {
       _stopSimulatorMove();
@@ -407,25 +495,45 @@ class _RunScreenState extends State<RunScreen> {
   // ----------------------------------------------------------
   // 코스
   // ----------------------------------------------------------
-  Future<void> _openCourses() async {
+  // ⇄: 러닝이면 코스 고르기로, 코스 러닝이면 러닝으로. 화면을 바꿔 끼웁니다.
+  void _swap() {
     if (_tracker.state != RunState.idle) {
-      _showMessage('달리는 중에는 코스를 바꿀 수 없어요.');
+      _showMessage('달리는 중에는 바꿀 수 없어요. 완료한 뒤에 바꿔주세요.');
       return;
     }
-    final Course? course = await Navigator.push<Course>(
-      context,
-      slideFromRight(
-        CourseScreen(position: _currentPosition, selectedId: _course?.id),
-      ),
-    );
-    if (course == null || !mounted) return;
-    setState(() => _course = course);
-    _showWholeCourse(course);
+    final Widget next = _course == null
+        ? CourseScreen(userId: widget.userId, position: _currentPosition)
+        : RunScreen(userId: widget.userId);
+    Navigator.pushReplacement(context, slideFromRight(next));
   }
 
-  void _clearCourse() {
-    setState(() => _course = null);
-    _moveMap(_position);
+  // 코스 출발점에서 멀리 떨어진 채 시작하면, 지도가 내 자리로 가면서 코스가
+  // 화면 밖으로 사라져 버립니다. 왜 안 보이는지 알 수 있게 거리를 알려줍니다.
+  void _warnIfFarFromCourse() {
+    final Course? course = _course;
+    if (course == null) return;
+    final double meters = const Distance()(_position, course.points.first);
+    if (meters > _farFromCourseMeters) {
+      _showMessage(
+        '코스 출발점에서 ${(meters / 1000).toStringAsFixed(1)}km 떨어져 있어요. '
+        '코스 위를 지나야 코인을 먹어요.',
+      );
+    }
+  }
+
+  // 지도 위 코스 표시를 누르면 다른 코스를 고르러 갑니다.
+  void _pickAnotherCourse() {
+    if (_tracker.state != RunState.idle) return;
+    Navigator.pushReplacement(
+      context,
+      slideFromRight(
+        CourseScreen(
+          userId: widget.userId,
+          position: _currentPosition,
+          selectedId: _course?.id,
+        ),
+      ),
+    );
   }
 
   // 코스 전체가 화면에 들어오게 지도를 맞춥니다.
@@ -490,14 +598,10 @@ class _RunScreenState extends State<RunScreen> {
         if (!didPop) _confirmExit();
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('러닝'),
-          actions: [
-            _UserBadge(userId: widget.userId),
-            const SizedBox(width: AppSpacing.sm),
-            _CourseButton(onTap: _openCourses),
-            const SizedBox(width: AppSpacing.md),
-          ],
+        appBar: RunAppBar(
+          title: _course == null ? '러닝' : '코스 러닝',
+          userId: widget.userId,
+          onSwap: _swap,
         ),
         // 지도는 화면 끝까지 쓰고(top: false), 아래 패널만 시스템 영역을 피합니다.
         //
@@ -536,24 +640,31 @@ class _RunScreenState extends State<RunScreen> {
           options: MapOptions(
             initialCenter: _position,
             initialZoom: _initialZoom,
-            onMapReady: () => _isMapReady = true,
+            onMapReady: () {
+              _isMapReady = true;
+              // 코스를 들고 들어왔으면 코스 전체부터 보여줍니다.
+              final Course? course = _course;
+              if (course != null) _showWholeCourse(course);
+            },
           ),
           children: [
             ...MapTiles.layers(),
-            // 고른 코스는 내 경로 밑에 굵고 옅게 깔아 둡니다. 그 위를 따라 달리면
-            // 검은 내 경로가 코스를 덮어가며 그려집니다.
+            // 고른 코스는 절취선 같은 점선으로 깔아 둡니다. 반투명이지만 진해서 색을 뺀
+            // 지도 위에서도 또렷하고, 그 위를 지나간 내 경로(검은 실선)와 구분됩니다.
             if (_course != null) ...[
               PolylineLayer(
                 polylines: [
                   Polyline(
                     points: _course!.points,
-                    strokeWidth: 9,
-                    color: AppColors.black.withValues(alpha: 0.18),
+                    strokeWidth: 5,
+                    color: AppColors.black.withValues(alpha: 0.6),
+                    pattern: StrokePattern.dashed(segments: const [14, 9]),
                   ),
                 ],
               ),
               MarkerLayer(
                 markers: [
+                  ..._coinMarkers(),
                   Marker(
                     point: _course!.points.last,
                     width: 22,
@@ -622,7 +733,11 @@ class _RunScreenState extends State<RunScreen> {
             left: AppSpacing.md,
             bottom: AppSpacing.md,
             right: _devMode ? 160 : 72,
-            child: _CourseChip(course: _course!, onClear: _clearCourse),
+            child: _CourseChip(
+              course: _course!,
+              coins: _coins,
+              onTap: _pickAnotherCourse,
+            ),
           ),
         // 나침반. 개발자 모드에서는 방향 버튼 한가운데로 들어갑니다.
         Positioned(
@@ -632,15 +747,36 @@ class _RunScreenState extends State<RunScreen> {
               ? _SimulatorPad(
                   onPressStart: _startSimulatorMove,
                   onPressEnd: _stopSimulatorMove,
-                  center: _Compass(
-                    controller: _mapController,
-                    onTap: _onCompassTap,
-                  ),
+                  center: _Compass(onTap: _onCompassTap),
                 )
-              : _Compass(controller: _mapController, onTap: _onCompassTap),
+              : _Compass(onTap: _onCompassTap),
         ),
       ],
     );
+  }
+
+  // 아직 안 먹은 코인. 왕복 코스에서 반환점을 찍기 전에는 흐리게 보여서
+  // "지금은 못 먹는다"를 알려줍니다.
+  List<Marker> _coinMarkers() {
+    final CourseCoins? coins = _coins;
+    if (coins == null) return const [];
+    final bool locked = coins.isRoundTrip && !coins.turned;
+    final LatLng? turn = coins.turnPoint;
+    return [
+      for (int i = 0; i < coins.coins.length; i++)
+        if (!coins.isCollected(i))
+          Marker(
+            point: coins.coins[i],
+            width: 18,
+            height: 18,
+            child: Opacity(
+              opacity: locked ? 0.5 : 1,
+              child: const GoldCoin(size: 18),
+            ),
+          ),
+      if (turn != null && !coins.turned)
+        Marker(point: turn, width: 24, height: 24, child: const _TurnMark()),
+    ];
   }
 
   Widget _buildPanel() {
@@ -722,7 +858,11 @@ class _RunScreenState extends State<RunScreen> {
                   const DoubleRule(),
 
                   const SizedBox(height: AppSpacing.md),
-                  _RewardPreview(userId: widget.userId, record: record),
+                  _RewardPreview(
+                    userId: widget.userId,
+                    record: record,
+                    coins: _coins,
+                  ),
                 ],
               ),
             ),
@@ -871,7 +1011,14 @@ class _RewardPreview extends StatefulWidget {
   final String userId;
   final RunRecord record;
 
-  const _RewardPreview({required this.userId, required this.record});
+  // 코스 러닝이면 골드를 걸음이 아니라 코인으로 셉니다. 저장할 때와 같은 계산입니다.
+  final CourseCoins? coins;
+
+  const _RewardPreview({
+    required this.userId,
+    required this.record,
+    required this.coins,
+  });
 
   @override
   State<_RewardPreview> createState() => _RewardPreviewState();
@@ -881,6 +1028,13 @@ class _RewardPreviewState extends State<_RewardPreview> {
   late final Stream<UserModel?> _userStream = UserRepository.instance.watchUser(
     widget.userId,
   );
+
+  int _gold(EquipmentSet? gear) {
+    final CourseCoins? coins = widget.coins;
+    return coins == null
+        ? RunRules.goldFor(widget.record, gear: gear)
+        : RunRules.courseGoldFor(coins.gold, gear: gear);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -912,7 +1066,7 @@ class _RewardPreviewState extends State<_RewardPreview> {
                 children: [
                   Text(
                     '+${RunRules.expFor(record, gear: gear)} EXP  ·  '
-                    '+${RunRules.goldFor(record, gear: gear)} ',
+                    '+${_gold(gear)} ',
                     style: textTheme.titleMedium,
                   ),
                   const GoldCoin(size: 16),
@@ -1029,55 +1183,6 @@ class _GpsDiagnostics extends StatelessWidget {
   }
 }
 
-// 앱바 오른쪽의 레벨/골드 표시 (Firestore 값을 실시간으로 보여줌)
-// 러닝 화면은 1초마다 다시 그려지므로, 스트림을 State에 한 번만 만들어 둡니다.
-class _UserBadge extends StatefulWidget {
-  final String userId;
-
-  const _UserBadge({required this.userId});
-
-  @override
-  State<_UserBadge> createState() => _UserBadgeState();
-}
-
-class _UserBadgeState extends State<_UserBadge> {
-  late final Stream<UserModel?> _userStream = UserRepository.instance.watchUser(
-    widget.userId,
-  );
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<UserModel?>(
-      stream: _userStream,
-      builder: (context, snapshot) {
-        final UserModel? user = snapshot.data;
-        if (user == null) return const SizedBox.shrink();
-        final TextStyle? style = Theme.of(
-          context,
-        ).textTheme.labelLarge?.copyWith(fontSize: 13);
-        return Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.xs,
-          ),
-          decoration: BoxDecoration(
-            color: AppColors.cream,
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Lv.${user.level} · ', style: style),
-              const GoldCoin(size: 15),
-              Text(' ${user.gold}', style: style),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
 // 지도 위 내 위치 점
 class _PositionDot extends StatelessWidget {
   const _PositionDot();
@@ -1089,33 +1194,6 @@ class _PositionDot extends StatelessWidget {
         color: AppColors.black,
         shape: BoxShape.circle,
         border: Border.all(color: AppColors.accent, width: 4),
-      ),
-    );
-  }
-}
-
-// 앱바의 코스 고르기 버튼. 검은 네모에 흰 교환 아이콘
-class _CourseButton extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _CourseButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: '코스 고르기',
-      child: Material(
-        color: AppColors.black,
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: const SizedBox(
-            width: 36,
-            height: 36,
-            child: Icon(Icons.swap_horiz, color: AppColors.white, size: 22),
-          ),
-        ),
       ),
     );
   }
@@ -1145,67 +1223,140 @@ class _CourseFlag extends StatelessWidget {
   }
 }
 
-// 지도 왼쪽 아래: 지금 고른 코스 이름과 지우기
+// 왕복 코스의 반환점. 여기를 찍어야 코인을 먹기 시작합니다.
+class _TurnMark extends StatelessWidget {
+  const _TurnMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.black,
+        shape: BoxShape.circle,
+        border: Border.all(color: AppColors.white, width: 2),
+      ),
+      child: const Icon(Icons.u_turn_left, size: 14, color: AppColors.white),
+    );
+  }
+}
+
+// 지도 왼쪽 아래: 지금 고른 코스 이름과 먹은 코인 수 (누르면 다른 코스 고르기)
 class _CourseChip extends StatelessWidget {
   final Course course;
-  final VoidCallback onClear;
+  final CourseCoins? coins;
+  final VoidCallback onTap;
 
-  const _CourseChip({required this.course, required this.onClear});
+  const _CourseChip({
+    required this.course,
+    required this.coins,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.bottomLeft,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.md - 4,
-          AppSpacing.xs,
-          AppSpacing.xs,
-          AppSpacing.xs,
-        ),
-        decoration: BoxDecoration(
-          color: AppColors.black,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                '${course.name} · ${formatKm(course.distanceMeters)}km',
-                overflow: TextOverflow.ellipsis,
-                style: AppTheme.sans.copyWith(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.white,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md - 4,
+            vertical: AppSpacing.xs + 2,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.black,
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  '${course.name} · ${formatKm(course.distanceMeters)}km',
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTheme.sans.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.white,
+                  ),
                 ),
               ),
-            ),
-            GestureDetector(
-              onTap: onClear,
-              child: const Padding(
-                padding: EdgeInsets.all(AppSpacing.xs),
-                child: Icon(Icons.close, size: 16, color: AppColors.sandOnDark),
-              ),
-            ),
-          ],
+              if (coins != null) ...[
+                const SizedBox(width: AppSpacing.sm),
+                const GoldCoin(size: 15),
+                Text(
+                  ' ${coins!.collectedCount}/${coins!.coins.length}',
+                  style: AppTheme.sans.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.sandOnDark,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-// 나침반. 지도를 돌리면 같이 돌아서 바늘이 늘 북쪽을 가리킵니다.
-class _Compass extends StatelessWidget {
-  final MapController controller;
+// 나침반. 폰의 방향 센서를 읽어서 바늘이 실제 북쪽을 가리킵니다.
+// 폰을 돌리면 바늘이 반대로 돌아 북쪽에 머뭅니다.
+//
+// 센서가 없는 기종(일부 저가폰, 에뮬레이터)에서는 바늘이 위를 향한 채 멈춰 있고
+// 가운데 점이 빈 원으로 바뀝니다.
+class _Compass extends StatefulWidget {
   final VoidCallback onTap;
 
-  const _Compass({required this.controller, required this.onTap});
+  const _Compass({required this.onTap});
+
+  @override
+  State<_Compass> createState() => _CompassState();
+}
+
+class _CompassState extends State<_Compass> {
+  StreamSubscription<CompassEvent>? _subscription;
+  bool _hasSensor = false;
+
+  // AnimatedRotation에 넘기는 바퀴 수. 359도 -> 1도로 넘어갈 때 한 바퀴 거꾸로 돌지
+  // 않도록, 각도를 그대로 쓰지 않고 가까운 쪽으로 이어 붙입니다.
+  double _turns = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscription = FlutterCompass.events?.listen(
+      _onHeading,
+      onError: (Object error) => debugPrint('나침반 오류: $error'),
+    );
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  void _onHeading(CompassEvent event) {
+    final double? heading = event.heading;
+    if (heading == null || !mounted) return;
+    // 폰이 동쪽(90도)을 보면 북쪽은 화면 왼쪽(-90도)입니다.
+    final double target = -heading / 360;
+    final double delta = target - _turns;
+    final double shortest = delta - delta.roundToDouble();
+    // 1도 미만 흔들림은 무시합니다. 매번 다시 그리면 배터리만 씁니다.
+    if (_hasSensor && shortest.abs() < 1 / 360) return;
+    setState(() {
+      _hasSensor = true;
+      _turns += shortest;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
         width: 42,
@@ -1215,15 +1366,10 @@ class _Compass extends StatelessWidget {
           shape: BoxShape.circle,
           border: Border.all(color: AppColors.black, width: 1.4),
         ),
-        child: StreamBuilder<MapEvent>(
-          stream: controller.mapEventStream,
-          builder: (context, snapshot) {
-            final double rotation = snapshot.data?.camera.rotationRad ?? 0;
-            return Transform.rotate(
-              angle: rotation,
-              child: CustomPaint(painter: _NeedlePainter()),
-            );
-          },
+        child: AnimatedRotation(
+          turns: _turns,
+          duration: const Duration(milliseconds: 180),
+          child: CustomPaint(painter: _NeedlePainter(hasSensor: _hasSensor)),
         ),
       ),
     );
@@ -1232,6 +1378,10 @@ class _Compass extends StatelessWidget {
 
 // 위쪽 검은 바늘(북) + 아래쪽 옅은 바늘(남)
 class _NeedlePainter extends CustomPainter {
+  final bool hasSensor;
+
+  const _NeedlePainter({required this.hasSensor});
+
   @override
   void paint(Canvas canvas, Size size) {
     final Offset c = size.center(Offset.zero);
@@ -1249,11 +1399,20 @@ class _NeedlePainter extends CustomPainter {
       ..close();
     canvas.drawPath(south, Paint()..color = AppColors.sand);
     canvas.drawPath(north, Paint()..color = AppColors.black);
-    canvas.drawCircle(c, 1.6, Paint()..color = AppColors.white);
+    // 센서가 없으면 가운데를 빈 원으로 그려서 "진짜 방향이 아님"을 알립니다.
+    canvas.drawCircle(
+      c,
+      hasSensor ? 1.6 : 2.6,
+      Paint()
+        ..color = AppColors.white
+        ..style = hasSensor ? PaintingStyle.fill : PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
   }
 
   @override
-  bool shouldRepaint(_NeedlePainter oldDelegate) => false;
+  bool shouldRepaint(_NeedlePainter oldDelegate) =>
+      oldDelegate.hasSensor != hasSensor;
 }
 
 // 개발용 방향 버튼 (누르고 있는 동안 계속 이동)

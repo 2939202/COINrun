@@ -6,6 +6,8 @@ import '../services/course_repository.dart';
 import '../services/seoul_districts.dart';
 import '../theme/app_theme.dart';
 import '../widgets/course_widgets.dart';
+import '../widgets/run_app_bar.dart';
+import 'run_screen.dart';
 
 // ============================================================
 // 코스 고르기
@@ -16,13 +18,21 @@ import '../widgets/course_widgets.dart';
 //   ✂ - - - - -   절취선
 //   사설 코스     - 하트 많은 순 상위 3개
 //
-// 코스를 누르면 그 코스를 들고 러닝 화면으로 돌아갑니다. (Navigator.pop)
+// 러닝 화면과 한 쌍입니다. 앱바(코스 러닝 · ⇄)가 똑같고, ⇄를 누르면 러닝으로,
+// 코스를 누르면 그 코스를 든 러닝 화면(코스 러닝)으로 바꿔 끼웁니다.
+// ←는 언제나 홈으로 나갑니다.
 // ============================================================
 class CourseScreen extends StatefulWidget {
+  final String userId;
   final LatLng? position; // 아직 GPS를 못 잡았으면 null
   final String? selectedId; // 지금 골라둔 코스
 
-  const CourseScreen({super.key, this.position, this.selectedId});
+  const CourseScreen({
+    super.key,
+    required this.userId,
+    this.position,
+    this.selectedId,
+  });
 
   @override
   State<CourseScreen> createState() => _CourseScreenState();
@@ -88,7 +98,19 @@ class _CourseScreenState extends State<CourseScreen> {
     _show(district);
   }
 
-  void _choose(Course course) => Navigator.pop(context, course);
+  void _choose(Course course) {
+    Navigator.pushReplacement(
+      context,
+      slideFromRight(RunScreen(userId: widget.userId, course: course)),
+    );
+  }
+
+  void _swap() {
+    Navigator.pushReplacement(
+      context,
+      slideFromRight(RunScreen(userId: widget.userId)),
+    );
+  }
 
   Future<void> _seeAll({required bool official}) async {
     final Course? course = await Navigator.push<Course>(
@@ -109,7 +131,7 @@ class _CourseScreenState extends State<CourseScreen> {
     final bool searching = _searchFocus.hasFocus || _search.text.isNotEmpty;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('코스')),
+      appBar: RunAppBar(title: '코스 러닝', userId: widget.userId, onSwap: _swap),
       body: SafeArea(
         top: false,
         child: ListView(
