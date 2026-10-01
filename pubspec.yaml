@@ -56,3 +56,15 @@ flutter:
     - family: ChosunKm
       fonts:
         - asset: assets/fonts/ChosunKm.ttf
+    # 검은 카드 글자, 영문 소제목, 숫자 아래 이름
+    - family: JayeonSans
+      fonts:
+        - asset: assets/fonts/JayeonSans-Regular.ttf
+        - asset: assets/fonts/JayeonSans-Medium.ttf
+          weight: 500
+    # "3위"의 "위"처럼 세리프 숫자 옆에 붙는 한글
+    - family: Hahmlet
+      fonts:
+        # Regular는 획이 가늘어 굵은 숫자 옆에서 고딕처럼 보입니다. SemiBold가 맞습니다.
+        - asset: assets/fonts/Hahmlet-SemiBold.ttf
+          weight: 600

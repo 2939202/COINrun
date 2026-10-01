@@ -35,7 +35,19 @@ class HomeHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('GOOD TO SEE YOU', style: AppTheme.caption),
+              Text(
+                'GOOD TO SEE YOU',
+                style: AppTheme.caption.copyWith(
+                  fontFamily: AppTheme.sansFont,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.accentDeep,
+                  // 자연산스는 Medium(500)이 가장 굵습니다. 그보다 진하게 보이도록
+                  // 같은 색 그림자를 옆으로 살짝 겹칩니다.
+                  shadows: const [
+                    Shadow(color: AppColors.accentDeep, offset: Offset(0.4, 0)),
+                  ],
+                ),
+              ),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 user.nickname,
@@ -50,6 +62,7 @@ class HomeHeader extends StatelessWidget {
         IconButton(
           tooltip: '설정',
           onPressed: onSettings,
+          color: AppColors.black,
           icon: const Icon(Icons.settings_outlined),
         ),
       ],
@@ -65,7 +78,6 @@ class LevelCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
     final int needed = RunRules.expToNextLevel(user.level);
     final double progress = (user.exp / needed).clamp(0.0, 1.0);
 
@@ -84,7 +96,11 @@ class LevelCard extends StatelessWidget {
             children: [
               Text(
                 'LEVEL',
-                style: AppTheme.caption.copyWith(color: AppColors.accentOnDark),
+                style: AppTheme.caption.copyWith(
+                  fontFamily: AppTheme.sansFont,
+                  fontWeight: FontWeight.w400,
+                  color: AppColors.sandOnDark,
+                ),
               ),
               const Spacer(),
               // 등급표
@@ -94,14 +110,15 @@ class LevelCard extends StatelessWidget {
                   vertical: 3,
                 ),
                 decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.accentOnDark, width: 1.3),
+                  border: Border.all(color: AppColors.sandOnDark, width: 1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   RunRules.tierName(user.level),
-                  style: textTheme.titleMedium?.copyWith(
-                    color: AppColors.accentOnDark,
+                  style: AppTheme.sans.copyWith(
+                    color: AppColors.paperOnDark,
                     fontSize: 13,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
@@ -111,12 +128,12 @@ class LevelCard extends StatelessWidget {
 
           // 큰 레벨 숫자 + 오른쪽에 다음 레벨
           Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text(
                 '${user.level}',
                 style: AppTheme.number.copyWith(
-                  fontSize: 64,
+                  fontSize: 76,
                   color: AppColors.white,
                 ),
               ),
@@ -127,8 +144,10 @@ class LevelCard extends StatelessWidget {
                   Text(
                     'NEXT',
                     style: AppTheme.caption.copyWith(
+                      fontFamily: AppTheme.sansFont,
+                      fontWeight: FontWeight.w400,
                       fontSize: 10,
-                      color: AppColors.accentOnDark,
+                      color: AppColors.sandOnDark,
                     ),
                   ),
                   const SizedBox(height: 1),
@@ -162,16 +181,17 @@ class LevelCard extends StatelessWidget {
                   children: [
                     Text(
                       '${user.exp}',
-                      style: textTheme.titleMedium?.copyWith(
+                      style: AppTheme.sans.copyWith(
                         color: AppColors.white,
                         fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                     Flexible(
                       child: Text(
                         ' / $needed EXP',
-                        style: textTheme.bodyMedium?.copyWith(
-                          color: AppColors.sand,
+                        style: AppTheme.sans.copyWith(
+                          color: AppColors.sandOnDark,
                           fontSize: 13,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -184,8 +204,8 @@ class LevelCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   '다음 레벨까지 ${needed - user.exp}',
-                  style: textTheme.bodyMedium?.copyWith(
-                    color: AppColors.sand,
+                  style: AppTheme.sans.copyWith(
+                    color: AppColors.sandOnDark,
                     fontSize: 13,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -210,7 +230,8 @@ class TotalsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const DoubleRule(),
+        // 위는 두 줄, 아래는 한 줄. 세 줄 모두 같은 굵기입니다.
+        const DoubleRule(thick: 1),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm + 4),
           child: IntrinsicHeight(
@@ -221,6 +242,7 @@ class TotalsRow extends StatelessWidget {
                   child: TotalBlock(
                     value: formatKm(user.totalDistance),
                     label: '총 킬로미터',
+                    home: true,
                   ),
                 ),
                 const VerticalDivider(color: AppColors.sand, width: 1),
@@ -229,6 +251,7 @@ class TotalsRow extends StatelessWidget {
                     value: formatHoursMinutes(user.totalRunSeconds),
                     label: '총 시간',
                     padLeft: true,
+                    home: true,
                   ),
                 ),
                 const VerticalDivider(color: AppColors.sand, width: 1),
@@ -237,11 +260,32 @@ class TotalsRow extends StatelessWidget {
             ),
           ),
         ),
-        const DoubleRule(),
+        Container(height: 1, color: AppColors.black),
       ],
     );
   }
 }
+
+// 홈 화면의 누적 기록 글자. 러닝 화면은 원래 크기와 색을 그대로 씁니다.
+const double _homeTotalSize = 30;
+const double _homeRankSize = 33;
+
+// 세 칸의 숫자 크기가 달라도 이름 줄이 같은 높이에 오도록, 숫자 자리 높이를
+// 고정하고 아래에 붙입니다.
+const double _homeNumberBox = 36;
+const double _homeNumberGap = AppSpacing.xs + 1;
+
+Widget _homeNumber(Widget child) {
+  return SizedBox(
+    height: _homeNumberBox,
+    child: Align(alignment: Alignment.bottomLeft, child: child),
+  );
+}
+
+final TextStyle _homeTotalLabel = AppTheme.sans.copyWith(
+  fontSize: 14,
+  color: AppColors.label,
+);
 
 class TotalBlock extends StatelessWidget {
   final String value;
@@ -251,12 +295,16 @@ class TotalBlock extends StatelessWidget {
   // 러닝 화면처럼 세 칸을 가운데 정렬로 쓸 때
   final bool center;
 
+  // 홈 화면: 숫자를 조금 크게, 이름은 고딕 회색으로
+  final bool home;
+
   const TotalBlock({
     super.key,
     required this.value,
     required this.label,
     this.padLeft = false,
     this.center = false,
+    this.home = false,
   });
 
   @override
@@ -270,16 +318,30 @@ class TotalBlock extends StatelessWidget {
             : CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 숫자가 길어도 칸을 넘지 않게 줄여서 맞춥니다.
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: center ? Alignment.center : Alignment.centerLeft,
-            child: Text(value, style: AppTheme.number.copyWith(fontSize: 27)),
-          ),
-          const SizedBox(height: AppSpacing.xs + 1),
+          if (home)
+            _homeNumber(
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.bottomLeft,
+                child: Text(
+                  value,
+                  style: AppTheme.number.copyWith(fontSize: _homeTotalSize),
+                ),
+              ),
+            )
+          else
+            // 숫자가 길어도 칸을 넘지 않게 줄여서 맞춥니다.
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: center ? Alignment.center : Alignment.centerLeft,
+              child: Text(value, style: AppTheme.number.copyWith(fontSize: 27)),
+            ),
+          const SizedBox(height: _homeNumberGap),
           Text(
             label,
-            style: textTheme.bodyMedium?.copyWith(color: AppColors.mute),
+            style: home
+                ? _homeTotalLabel
+                : textTheme.bodyMedium?.copyWith(color: AppColors.mute),
             overflow: TextOverflow.ellipsis,
           ),
         ],
@@ -319,9 +381,9 @@ class RankTotalState extends State<RankTotal> {
             children: [
               // 아직 순위가 없으면 줄 하나로 비워둡니다.
               if (rank == null)
-                SizedBox(
-                  height: 30,
-                  child: Center(
+                _homeNumber(
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
                     child: Container(
                       width: 30,
                       height: 2,
@@ -330,20 +392,32 @@ class RankTotalState extends State<RankTotal> {
                   ),
                 )
               else
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    '$rank위',
-                    style: AppTheme.number.copyWith(fontSize: 30),
+                _homeNumber(
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.bottomLeft,
+                    // 숫자 글꼴에는 한글이 없어서 "위"만 한글 세리프로 씁니다.
+                    child: Text.rich(
+                      TextSpan(
+                        text: '$rank',
+                        children: [
+                          TextSpan(
+                            text: '위',
+                            style: TextStyle(
+                              fontFamily: AppTheme.hangulSerifFont,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      style: AppTheme.number.copyWith(fontSize: _homeRankSize),
+                    ),
                   ),
                 ),
-              const SizedBox(height: AppSpacing.sm),
+              const SizedBox(height: _homeNumberGap),
               Text(
                 '거리 순위',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: AppColors.mute),
+                style: _homeTotalLabel,
                 overflow: TextOverflow.ellipsis,
               ),
             ],
@@ -356,13 +430,16 @@ class RankTotalState extends State<RankTotal> {
 
 // 굵은 줄 + 가는 줄
 class DoubleRule extends StatelessWidget {
-  const DoubleRule({super.key});
+  // 위 줄 굵기. 아래 줄은 항상 1입니다.
+  final double thick;
+
+  const DoubleRule({super.key, this.thick = 2.4});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Container(height: 2.4, color: AppColors.black),
+        Container(height: thick, color: AppColors.black),
         const SizedBox(height: 2.4),
         Container(height: 1, color: AppColors.black),
       ],
@@ -556,7 +633,6 @@ class GoldPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.sm,
@@ -564,7 +640,7 @@ class GoldPill extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.accent, width: 1.2),
+        border: Border.all(color: AppColors.accentDeep, width: 1.2),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -588,14 +664,6 @@ class GoldPill extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.xs + 1),
           Text('$gold', style: AppTheme.number.copyWith(fontSize: 14)),
-          const SizedBox(width: 2),
-          Text(
-            'G',
-            style: textTheme.labelMedium?.copyWith(
-              color: AppColors.black,
-              fontSize: 10,
-            ),
-          ),
         ],
       ),
     );

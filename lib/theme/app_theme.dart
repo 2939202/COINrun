@@ -22,16 +22,24 @@ class AppColors {
   // 포인트 색. 아껴서 씁니다. (레벨업, 지도 경로, 내 순위 강조)
   static const Color accent = Color(0xFF8A6A3E);
 
+  // 홈 화면 인사말과 골드 테두리. accent보다 한 톤 진합니다.
+  static const Color accentDeep = Color(0xFF79583A);
+
   // 검은 카드 위에 올리는 포인트색. 어두운 갈색은 검정 위에서 읽히지 않아 밝게 씁니다.
   static const Color accentOnDark = Color(0xFFC9A87C);
 
   // 검은 카드 위의 빈 칸(진행바 바닥). 너무 어두우면 막대가 아예 안 보입니다.
   static const Color trackOnDark = Color(0xFF4B4139);
 
+  // 검은 카드 위의 글자. 흰색보다 한 톤 낮춰서 숫자(흰색)만 튀게 합니다.
+  static const Color sandOnDark = Color(0xFFCFC1A3); // LEVEL, NEXT, 경험치 설명
+  static const Color paperOnDark = Color(0xFFECDDBE); // 등급표 안 글자
+
   static const Color cream = Color(0xFFF5EDE0); // 카드 배경
   static const Color creamDeep = Color(0xFFF1E8D7); // 캐릭터/잡화점 같은 화면 배경
   static const Color sand = Color(0xFFDBD6C0); // 구분선, 진행바 바닥
   static const Color mute = Color(0xFF8B8175); // 보조 글자
+  static const Color label = Color(0xFF91857C); // 큰 숫자 아래 이름 (총 킬로미터 ...)
   static const Color gold = Color(0xFFC08A2E); // 골드 숫자
 
   static const Color error = Color(0xFFB4442A);
@@ -66,10 +74,18 @@ class AppTheme {
   // 한글 글꼴
   static const String koreanFont = 'ChosunKm';
 
+  // 고딕. 검은 카드 글자와 홈 화면의 작은 이름들에 씁니다. 굵기는 400, 500 두 가지입니다.
+  static const String sansFont = 'JayeonSans';
+
+  // 한글 세리프. 숫자 글꼴(DMSerif)에는 한글이 없어서 "3위"의 "위"를 이걸로 씁니다.
+  static const String hangulSerifFont = 'Hahmlet';
+
   static const TextStyle number = TextStyle(
     fontFamily: numberFont,
     height: 1.0,
   );
+
+  static const TextStyle sans = TextStyle(fontFamily: sansFont);
 
   // 영문 소제목 (GOOD TO SEE YOU, LEVEL, MY RUNNER ...)
   static const TextStyle caption = TextStyle(
