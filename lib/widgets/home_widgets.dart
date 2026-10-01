@@ -25,9 +25,11 @@ class HomeHeader extends StatelessWidget {
 
   const HomeHeader({super.key, required this.user, required this.onSettings});
 
+  // 인사말-이름, 이름-레벨 카드 사이 간격
+  static const double nameGap = AppSpacing.md;
+
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -48,10 +50,15 @@ class HomeHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: AppSpacing.xs),
+              // 이름은 인사말과 레벨 카드 사이 한가운데에 옵니다.
+              // (아래 간격은 main_screen.dart에서 같은 값으로 맞춥니다)
+              const SizedBox(height: HomeHeader.nameGap),
               Text(
                 user.nickname,
-                style: textTheme.headlineMedium?.copyWith(fontSize: 28),
+                style: AppTheme.serifNumber.copyWith(
+                  fontSize: 34,
+                  color: AppColors.black,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ],
@@ -468,6 +475,29 @@ class ShortcutsRow extends StatelessWidget {
   }
 }
 
+// 내 캐릭터 / 랭킹 카드가 같이 쓰는 모양과 글자
+BoxDecoration _shortcutDecoration(Color color) {
+  return BoxDecoration(
+    color: color,
+    borderRadius: BorderRadius.circular(AppRadius.md),
+    border: Border.all(color: AppColors.black, width: 1.4),
+  );
+}
+
+final TextStyle _shortcutCaption = AppTheme.caption.copyWith(
+  fontFamily: AppTheme.sansFont,
+  fontWeight: FontWeight.w500,
+  fontSize: 11,
+);
+final TextStyle _shortcutTitle = AppTheme.serifNumber.copyWith(
+  fontSize: 20,
+  color: AppColors.black,
+);
+final TextStyle _shortcutSub = AppTheme.sans.copyWith(
+  fontSize: 14,
+  color: AppColors.label,
+);
+
 class RunnerCard extends StatelessWidget {
   final UserModel user;
   final VoidCallback onTap;
@@ -476,46 +506,40 @@ class RunnerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
     return GestureDetector(
       onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        child: Container(
-          color: AppColors.cream,
-          child: Stack(
-            children: [
-              // 캐릭터는 오른쪽 아래에 붙여서 얼굴만 나오게 잘립니다.
-              Positioned(
-                right: -18,
-                bottom: -34,
-                width: 118,
-                height: 210,
-                child: const RunnerFigure(showGround: false),
+      child: Container(
+        // 테두리 안쪽으로만 캐릭터가 보이게 자릅니다. 랭킹 카드와 같은 테두리라
+        // 두 카드의 글자가 같은 자리에서 시작합니다.
+        clipBehavior: Clip.antiAlias,
+        decoration: _shortcutDecoration(AppColors.cream),
+        child: Stack(
+          children: [
+            // 캐릭터는 오른쪽 아래에 붙여서 얼굴만 나오게 잘립니다.
+            Positioned(
+              right: -44,
+              bottom: -192,
+              width: 170,
+              height: 300,
+              child: const RunnerFigure(showGround: false),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('MY RUNNER', style: _shortcutCaption),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text('내 캐릭터', style: _shortcutTitle),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    EquipmentRules.equippedSetName(user),
+                    style: _shortcutSub,
+                  ),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'MY RUNNER',
-                      style: AppTheme.caption.copyWith(fontSize: 11),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    Text('내 캐릭터', style: textTheme.titleLarge),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      EquipmentRules.equippedSetName(user),
-                      style: textTheme.bodyMedium?.copyWith(
-                        color: AppColors.mute,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -543,22 +567,15 @@ class RankingCardState extends State<RankingCard> {
       onTap: widget.onTap,
       child: Container(
         padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(color: AppColors.sand, width: 1.4),
-        ),
+        decoration: _shortcutDecoration(AppColors.white),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('RANKING', style: AppTheme.caption.copyWith(fontSize: 11)),
+            Text('RANKING', style: _shortcutCaption),
             const SizedBox(height: AppSpacing.sm),
-            Text('랭킹', style: textTheme.titleLarge),
+            Text('랭킹', style: _shortcutTitle),
             const SizedBox(height: AppSpacing.xs),
-            Text(
-              '전체 순위 보기',
-              style: textTheme.bodyMedium?.copyWith(color: AppColors.mute),
-            ),
+            Text('전체 순위 보기', style: _shortcutSub),
             const Spacer(),
             Container(height: 1, color: AppColors.sand),
             const SizedBox(height: AppSpacing.sm),
@@ -586,7 +603,7 @@ class RankingCardState extends State<RankingCard> {
                       decoration: BoxDecoration(
                         color: AppColors.cream,
                         shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.accent),
+                        border: Border.all(color: AppColors.accent, width: 1.5),
                       ),
                       child: Text(
                         '1',

@@ -77,7 +77,7 @@ class _MainScreenState extends State<MainScreen> {
                   user: user,
                   onSettings: () => _open(SettingsScreen(userId: _userId)),
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: HomeHeader.nameGap),
                 LevelCard(user: user),
                 const SizedBox(height: AppSpacing.xl),
                 TotalsRow(user: user),
@@ -107,14 +107,21 @@ class _MainScreenState extends State<MainScreen> {
       children: [
         Row(
           children: [
-            Text('최근 러닝', style: textTheme.titleLarge),
+            Text(
+              '최근 러닝',
+              style: AppTheme.serifNumber.copyWith(
+                fontSize: 20,
+                color: AppColors.black,
+              ),
+            ),
             const Spacer(),
             GestureDetector(
               onTap: () => _open(RunHistoryScreen(userId: _userId)),
               child: Text(
                 '전체 기록',
-                style: textTheme.labelLarge?.copyWith(
+                style: AppTheme.sans.copyWith(
                   fontSize: 14,
+                  fontWeight: FontWeight.w500,
                   color: AppColors.accent,
                   decoration: TextDecoration.underline,
                   decorationColor: AppColors.accent,
