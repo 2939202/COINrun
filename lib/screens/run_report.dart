@@ -1,12 +1,14 @@
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
+import 'package:vibration/vibration.dart';
 
 import '../game/run_rules.dart';
 import '../models/run_record.dart';
 import '../models/run_route.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
+import '../widgets/coin_rain.dart';
 import '../widgets/route_map.dart';
 import '../widgets/stat_block.dart';
 
@@ -26,6 +28,8 @@ Future<void> showRunReport(
   RunRecord record,
   RunReward reward,
 ) {
+  // 화면이 다시 그려져도 진동 횟수 제한이 처음부터 다시 세지지 않게 여기서 한 번만 만듭니다.
+  final _CoinBuzzer buzzer = _CoinBuzzer();
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -33,7 +37,8 @@ Future<void> showRunReport(
     // 막은 투명하게 두고, 흐림 효과를 우리가 직접 깝니다.
     barrierColor: Colors.transparent,
     transitionDuration: const Duration(milliseconds: 260),
-    pageBuilder: (context, _, _) => _RunReport(record: record, reward: reward),
+    pageBuilder: (context, _, _) =>
+        _RunReport(record: record, reward: reward, buzzer: buzzer),
     transitionBuilder: (context, animation, _, child) {
       final curved = CurvedAnimation(parent: animation, curve: Curves.easeOut);
       return FadeTransition(
@@ -54,8 +59,13 @@ Future<void> showRunReport(
 class _RunReport extends StatelessWidget {
   final RunRecord record;
   final RunReward reward;
+  final _CoinBuzzer buzzer;
 
-  const _RunReport({required this.record, required this.reward});
+  const _RunReport({
+    required this.record,
+    required this.reward,
+    required this.buzzer,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -115,6 +125,11 @@ class _RunReport extends StatelessWidget {
                 ],
               ),
             ),
+          ),
+
+          // 3. 받은 골드만큼 금화가 쏟아져서 화면 바닥에 통통 튑니다.
+          Positioned.fill(
+            child: CoinRain(gold: reward.gold, onImpact: buzzer.buzz),
           ),
         ],
       ),
@@ -181,5 +196,38 @@ class _RunReport extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+// 금화가 바닥에 닿을 때마다 짧게 "톡" 떨립니다.
+//
+// 금화가 수십 개라 닿을 때마다 다 떨면 진동이 뭉개져 "징—" 하고 길게만 느껴집니다.
+// 그래서 70ms에 한 번까지만, 전부 합쳐 24번까지만 떱니다.
+class _CoinBuzzer {
+  static const Duration gap = Duration(milliseconds: 70);
+  static const int maxBuzzes = 24;
+
+  final Stopwatch _clock = Stopwatch()..start();
+  Duration? _lastAt;
+  int _count = 0;
+  bool? _hasVibrator;
+
+  Future<void> buzz() async {
+    final Duration now = _clock.elapsed;
+    if (_count >= maxBuzzes) return;
+    if (_lastAt != null && now - _lastAt! < gap) return;
+    _lastAt = now;
+    _count++;
+    try {
+      _hasVibrator ??= await Vibration.hasVibrator();
+      if (_hasVibrator != true) return;
+      // 첫 금화는 조금 세게, 나머지는 가볍게
+      await Vibration.vibrate(
+        duration: _count == 1 ? 45 : 18,
+        amplitude: _count == 1 ? 200 : 90,
+      );
+    } catch (_) {
+      // 진동이 없는 기기(웹 등)는 그냥 넘어갑니다.
+    }
   }
 }

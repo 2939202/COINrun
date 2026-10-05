@@ -15,6 +15,11 @@ class UserModel {
   //   꺼짐 - 삭제하면 바로 사라집니다.
   //   켜짐 - 삭제하면 휴지통으로 가고, 거기서 되살리거나 완전히 지울 수 있습니다.
   final bool trashEnabled;
+
+  // 홈의 "시작"을 누르면 코스 러닝(코스 고르기)으로 갈지.
+  // 러닝 화면에서 ⇄로 코스 러닝으로 바꾸면 켜지고, 다시 러닝으로 바꾸면 꺼집니다.
+  // 한 번 바꾸면 그 쪽으로 고정되어서, 매번 ⇄를 누르지 않아도 됩니다.
+  final bool prefersCourseRun;
   final int level;
   final int exp; // 현재 레벨에서 쌓인 경험치 (레벨업하면 초과분만 남음)
   final int gold;
@@ -33,6 +38,7 @@ class UserModel {
     required this.nickname,
     required this.isGuest,
     required this.trashEnabled,
+    this.prefersCourseRun = false,
     required this.level,
     required this.exp,
     required this.gold,
@@ -74,6 +80,7 @@ class UserModel {
       // 지우면 기존 사용자가 랭킹에서 사라져 버리기 때문입니다.
       isGuest: map['isGuest'] as bool? ?? false,
       trashEnabled: map['trashEnabled'] as bool? ?? false,
+      prefersCourseRun: map['prefersCourseRun'] as bool? ?? false,
       level: (map['level'] as num?)?.toInt() ?? 1,
       exp: (map['exp'] as num?)?.toInt() ?? 0,
       gold: (map['gold'] as num?)?.toInt() ?? 0,
@@ -101,6 +108,7 @@ class UserModel {
       'nickname': nickname,
       'isGuest': isGuest,
       'trashEnabled': trashEnabled,
+      'prefersCourseRun': prefersCourseRun,
       'level': level,
       'exp': exp,
       'gold': gold,

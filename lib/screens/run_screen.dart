@@ -256,7 +256,27 @@ class _RunScreenState extends State<RunScreen> {
       _tracker.addPosition(newPosition, DateTime.now());
     });
     _moveMap(newPosition);
+    if (_tracker.lastWasTooFast) {
+      _warnTooFast();
+      return; // 차로 지나가면서 코인을 먹지 못하게 합니다.
+    }
     _checkCoins(newPosition);
+  }
+
+  // 너무 빠르다는 안내는 30초에 한 번만 띄웁니다. 차를 타면 2초마다 걸리기 때문입니다.
+  DateTime? _lastTooFastWarning;
+
+  void _warnTooFast() {
+    final DateTime now = DateTime.now();
+    final DateTime? last = _lastTooFastWarning;
+    if (last != null && now.difference(last) < const Duration(seconds: 30)) {
+      return;
+    }
+    _lastTooFastWarning = now;
+    _showMessage(
+      '이동 속도가 너무 빨라요. 시속 '
+      '${(RunTracker.maxRunningSpeed * 3.6).round()}km를 넘는 구간은 기록되지 않아요.',
+    );
   }
 
   // 달리는 중에만 코인을 먹습니다. 일시정지 중에 걸어가서 먹으면 안 됩니다.
@@ -446,6 +466,8 @@ class _RunScreenState extends State<RunScreen> {
       setState(() {
         _useSimulator = true;
         _tracker.disableStepSensor();
+        // 조이스틱은 순간이동하듯 움직여서 속도 제한을 끕니다. (RunTracker.enforceSpeedLimit)
+        _tracker.enforceSpeedLimit = false;
         // 코스 러닝이면 출발점에 세워서, 방향 버튼으로 바로 코스를 따라갈 수 있게 합니다.
         // 달리는 중에 옮기면 순간이동한 것처럼 기록되므로 시작 전에만 그렇게 합니다.
         final LatLng? courseStart = _tracker.state == RunState.idle
@@ -455,7 +477,10 @@ class _RunScreenState extends State<RunScreen> {
       });
     } else {
       _stopSimulatorMove();
-      setState(() => _useSimulator = false);
+      setState(() {
+        _useSimulator = false;
+        _tracker.enforceSpeedLimit = true;
+      });
       _startGps();
       _startStepSensor();
     }
@@ -496,11 +521,13 @@ class _RunScreenState extends State<RunScreen> {
   // 코스
   // ----------------------------------------------------------
   // ⇄: 러닝이면 코스 고르기로, 코스 러닝이면 러닝으로. 화면을 바꿔 끼웁니다.
+  // 바꾼 쪽을 기억해서, 다음에 홈에서 "시작"을 누르면 그 쪽으로 바로 갑니다.
   void _swap() {
     if (_tracker.state != RunState.idle) {
       _showMessage('달리는 중에는 바꿀 수 없어요. 완료한 뒤에 바꿔주세요.');
       return;
     }
+    UserRepository.instance.setPrefersCourseRun(widget.userId, _course == null);
     final Widget next = _course == null
         ? CourseScreen(userId: widget.userId, position: _currentPosition)
         : RunScreen(userId: widget.userId);
@@ -720,6 +747,7 @@ class _RunScreenState extends State<RunScreen> {
               lastAccuracy: _lastAccuracy,
               droppedByAccuracy: _droppedByAccuracy,
               rejectedJumps: _tracker.rejectedJumps,
+              tooFastCount: _tracker.tooFastCount,
               segments: _tracker.segments,
               isStreaming: _positionSubscription != null,
               isSimulator: _useSimulator,
@@ -1093,6 +1121,7 @@ class _GpsDiagnostics extends StatelessWidget {
   final double? lastAccuracy;
   final int droppedByAccuracy;
   final int rejectedJumps;
+  final int tooFastCount;
   final List<List<LatLng>> segments;
   final bool isStreaming;
   final bool isSimulator;
@@ -1106,6 +1135,7 @@ class _GpsDiagnostics extends StatelessWidget {
     required this.lastAccuracy,
     required this.droppedByAccuracy,
     required this.rejectedJumps,
+    required this.tooFastCount,
     required this.segments,
     required this.isStreaming,
     required this.isSimulator,
@@ -1140,7 +1170,9 @@ class _GpsDiagnostics extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: DefaultTextStyle(
+        // DefaultTextStyle은 위에서 내려오는 글꼴을 버리고 새로 정하므로 글꼴을 적습니다.
         style: const TextStyle(
+          fontFamily: AppTheme.sansFont,
           color: AppColors.white,
           fontSize: 11,
           height: 1.35,
@@ -1156,7 +1188,7 @@ class _GpsDiagnostics extends StatelessWidget {
             ),
             Text(
               '점 $points개  ·  토막 ${segments.length}개(그려지는 것 $drawable)  ·  '
-              '오차로 버림 $droppedByAccuracy  ·  멀어서 버림 $rejectedJumps',
+              '오차로 버림 $droppedByAccuracy  ·  멀어서 버림 $rejectedJumps  ·  빨라서 버림 $tooFastCount',
             ),
             if (!isSimulator)
               Text(
@@ -1173,7 +1205,7 @@ class _GpsDiagnostics extends StatelessWidget {
                 style: const TextStyle(
                   color: AppColors.accent,
                   fontSize: 11,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: AppTheme.sansMedium,
                 ),
               ),
           ],

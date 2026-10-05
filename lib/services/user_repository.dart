@@ -5,6 +5,7 @@ import '../game/course_coins.dart';
 import '../game/equipment_catalog.dart';
 import '../game/equipment_rules.dart';
 import '../game/route_simplifier.dart';
+import '../game/run_totals.dart';
 import '../game/stats_period.dart';
 import '../game/run_rules.dart';
 import '../models/equipment_set.dart';
@@ -72,6 +73,27 @@ class UserRepository {
           (query) => query.docs
               .map((doc) => RunStats.fromMap(doc.id, doc.data()))
               .toList(),
+        );
+  }
+
+  // 요약 칸을 이름으로 콕 집어 읽습니다. (AI 평가에서 씀)
+  //
+  // watchStats처럼 isWeek로 거르고 startAt으로 정렬하면 Firestore에 복합 색인을 따로
+  // 만들어야 합니다. 이름으로 읽으면 색인이 필요 없고, 뛰지 않은 기간은 그냥 빠집니다.
+  // whereIn은 한 번에 30개까지라 그 안에서만 씁니다.
+  Stream<Map<String, RunStats>> watchStatsByKeys(
+    String userId,
+    List<String> keys,
+  ) {
+    assert(keys.isNotEmpty && keys.length <= 30);
+    return _stats(userId)
+        .where(FieldPath.documentId, whereIn: keys)
+        .snapshots()
+        .map(
+          (query) => {
+            for (final doc in query.docs)
+              doc.id: RunStats.fromMap(doc.id, doc.data()),
+          },
         );
   }
 
@@ -207,6 +229,16 @@ class UserRepository {
     ).set({'trashEnabled': enabled}, SetOptions(merge: true));
   }
 
+  // 홈의 "시작"이 러닝과 코스 러닝 중 어디로 갈지 기억해 둡니다. (UserModel.prefersCourseRun)
+  //
+  // 화면 전환을 기다리게 하지 않으려고 부른 쪽에서 await하지 않습니다.
+  // 실패해도 다음 시작 때 원래 쪽으로 갈 뿐이라 오류는 로그만 남깁니다.
+  void setPrefersCourseRun(String userId, bool course) {
+    _userDoc(userId)
+        .set({'prefersCourseRun': course}, SetOptions(merge: true))
+        .catchError((Object error) => debugPrint('러닝 방식 저장 실패: $error'));
+  }
+
   // 목록에서만 감춥니다. 통계와 보상은 그대로 둡니다.
   Future<void> hideRun(String userId, String runId) {
     return _userDoc(userId).collection('runs').doc(runId).set({
@@ -217,8 +249,8 @@ class UserRepository {
   // 기록 하나를 목록에서 없앱니다.
   //
   // toTrash가 true면 휴지통 컬렉션으로 옮기고, false면 경로까지 바로 지웁니다.
-  // 어느 쪽이든 주간/월간 요약에서는 그 자리에서 빼냅니다. "삭제하면 주간·월간 기록에서도
-  // 빠집니다"라고 알려놓고 휴지통에 있는 동안 계속 세고 있으면 말이 다르기 때문입니다.
+  // 어느 쪽이든 주간/월간 요약과 홈의 누적 기록(거리·시간·걸음, 거리 랭킹)에서는 그 자리에서
+  // 빼냅니다. "삭제하면 빠집니다"라고 알려놓고 휴지통에 있는 동안 계속 세고 있으면 말이 다르기 때문입니다.
   //
   // 받은 골드와 경험치는 건드리지 않습니다. 이미 그 골드로 장비를 샀을 수 있어서,
   // 되돌리려다 골드가 마이너스가 되는 쪽이 더 이상합니다.
@@ -233,16 +265,16 @@ class UserRepository {
       userId: userId,
       run: run,
       sign: -1,
-      // 휴지통으로 옮기려면 원본 내용을 그대로 복사해야 해서 먼저 읽습니다.
-      readRef: toTrash ? runRef : null,
+      // 휴지통으로 옮길 원본을 복사하려고, 그리고 이미 지워진 기록을 두 번 빼지 않으려고 먼저 읽습니다.
+      readRef: runRef,
       write: (transaction, source) {
-        if (toTrash && source != null) {
+        if (toTrash) {
           transaction.set(_trash(userId).doc(run.id), {
-            ...source,
+            ...?source,
             'deletedAt': FieldValue.serverTimestamp(),
           });
           // 경로는 지우지 않습니다. 되살렸을 때 지도가 그대로 보여야 합니다.
-        } else if (!toTrash) {
+        } else {
           transaction.delete(_routes(userId).doc(run.id));
         }
         transaction.delete(runRef);
@@ -260,10 +292,9 @@ class UserRepository {
       sign: 1,
       readRef: trashRef,
       write: (transaction, source) {
-        if (source == null) return;
         transaction.set(
           _userDoc(userId).collection('runs').doc(run.id),
-          Map<String, dynamic>.from(source)..remove('deletedAt'),
+          Map<String, dynamic>.from(source!)..remove('deletedAt'),
         );
         transaction.delete(trashRef);
       },
@@ -315,14 +346,16 @@ class UserRepository {
     await _purgeTrashDocs(userId, oldest.docs.map((doc) => doc.id).toList());
   }
 
-  // 요약에서 빼거나(-1) 더하면서(+1) 기록 문서를 옮깁니다.
+  // 요약과 누적 기록에서 빼거나(-1) 더하면서(+1) 기록 문서를 옮깁니다.
   //
   // 트랜잭션은 읽기를 모두 끝낸 뒤에야 쓸 수 있어서, 옮길 원본을 읽는 일도 여기서 합니다.
+  // 원본이 이미 없으면(삭제를 두 번 눌렀거나 휴지통에서 이미 지워짐) 아무것도 하지 않습니다.
+  // 그대로 진행하면 같은 기록을 두 번 빼게 됩니다.
   Future<void> _applyStatsAndMove({
     required String userId,
     required RunLog run,
     required int sign,
-    required DocumentReference<Map<String, dynamic>>? readRef,
+    required DocumentReference<Map<String, dynamic>> readRef,
     required void Function(
       Transaction transaction,
       Map<String, dynamic>? source,
@@ -330,17 +363,33 @@ class UserRepository {
     write,
   }) async {
     final DateTime at = run.createdAt ?? DateTime.now();
+    final userDoc = _userDoc(userId);
     final stats = _stats(userId);
     final weekRef = stats.doc(StatsPeriod.weekKey(at));
     final monthRef = stats.doc(StatsPeriod.monthKey(at));
 
     await _firestore.runTransaction((transaction) async {
       // --- 읽기 ---
-      final source = readRef == null ? null : await transaction.get(readRef);
+      final source = await transaction.get(readRef);
+      if (!source.exists) return;
+      final userSnapshot = await transaction.get(userDoc);
       final weekSnapshot = await transaction.get(weekRef);
       final monthSnapshot = await transaction.get(monthRef);
 
       // --- 쓰기 ---
+      // 홈의 총 킬로미터·총 시간과 거리 랭킹. 골드·경험치·레벨은 그대로 둡니다. (removeRun 설명 참고)
+      if (userSnapshot.exists) {
+        final user = UserModel.fromMap(userSnapshot.data()!);
+        final totals = RunTotals.apply(user, run, sign);
+        transaction.set(userDoc, totals.toMap(), SetOptions(merge: true));
+        if (!user.isGuest) {
+          transaction.set(RankingRepository.instance.entryDoc(userId), {
+            'totalDistance': totals.distanceMeters,
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        }
+      }
+
       // 요약을 붙이기 전에 저장된 러닝은 요약에 들어간 적이 없습니다.
       // 없는 칸을 손대면 "-1회, -5km"짜리 칸이 새로 생겨버립니다.
       final periods = [
@@ -377,7 +426,7 @@ class UserRepository {
         );
       }
 
-      write(transaction, source?.data());
+      write(transaction, source.data());
     });
   }
 

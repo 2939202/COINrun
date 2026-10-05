@@ -52,13 +52,17 @@ class _RankingScreenState extends State<RankingScreen>
           indicatorSize: TabBarIndicatorSize.tab,
           labelColor: AppColors.black,
           unselectedLabelColor: AppColors.mute,
+          // 탭 글자는 스타일을 통째로 바꿔 끼우는 자리라 글꼴을 꼭 적습니다.
+          // (적지 않으면 기본 글꼴로 나옵니다)
           labelStyle: const TextStyle(
+            fontFamily: AppTheme.hangulSerifFont,
             fontSize: 17,
-            fontWeight: FontWeight.w800,
+            fontWeight: AppTheme.serifWeight,
           ),
           unselectedLabelStyle: const TextStyle(
+            fontFamily: AppTheme.sansFont,
             fontSize: 17,
-            fontWeight: FontWeight.w600,
+            fontWeight: AppTheme.sansMedium,
           ),
           dividerColor: AppColors.sand,
           tabs: [for (final kind in RankingKind.values) Tab(text: kind.label)],

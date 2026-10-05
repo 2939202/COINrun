@@ -223,7 +223,9 @@ void main() {
       final tracker = RunTracker()
         ..addSensorSteps(12345) // 화면을 열자마자 센서가 뱉는 누적값
         ..start(at(0), t0);
-      tracker.disableStepSensor(); // 조이스틱 켜기
+      // 조이스틱 켜기 (러닝 화면이 하는 것과 똑같이 두 가지를 끕니다)
+      tracker.disableStepSensor();
+      tracker.enforceSpeedLimit = false; // 0.15초에 5m = 33m/s라 제한에 걸립니다
 
       for (int taps = 1; taps <= 20; taps++) {
         tracker.addPosition(

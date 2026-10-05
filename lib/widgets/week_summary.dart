@@ -171,7 +171,7 @@ class _Compare extends StatelessWidget {
           '${diff.abs().toStringAsFixed(1)} km',
           style: textTheme.labelMedium?.copyWith(
             color: up ? AppColors.accent : AppColors.mute,
-            fontWeight: FontWeight.w800,
+            fontWeight: AppTheme.sansMedium,
           ),
         ),
       ],

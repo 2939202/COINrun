@@ -83,7 +83,7 @@ class RouteMap extends StatelessWidget {
   }
 }
 
-// 경로가 없을 때 (경로 저장을 붙이기 전에 뛴 기록)
+// 경로가 없을 때 (경로 저장을 붙이기 전에 뛴 기록, 움직이지 않고 끝낸 기록)
 class _NoRoute extends StatelessWidget {
   const _NoRoute();
 
@@ -94,7 +94,7 @@ class _NoRoute extends StatelessWidget {
       alignment: Alignment.center,
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Text(
-        '이 기록에는 경로가 없어요.\n경로는 이번 업데이트부터 저장됩니다.',
+        '이 기록에는 지나온 길이 남아 있지 않아요.',
         textAlign: TextAlign.center,
         style: Theme.of(
           context,

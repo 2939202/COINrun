@@ -68,20 +68,29 @@ class AppRadius {
 class AppTheme {
   AppTheme._();
 
-  // 큰 숫자는 세리프로 씁니다. 기록증이나 계기판 같은 인상을 주려는 것입니다.
-  static const String numberFont = 'DMSerif';
-
-  // 한글 글꼴
-  static const String koreanFont = 'ChosunKm';
-
-  // 고딕. 검은 카드 글자와 홈 화면의 작은 이름들에 씁니다. 굵기는 400, 500 두 가지입니다.
+  // ------------------------------------------------------------
+  // 글꼴은 두 가지만 씁니다.
+  //   자연산스(JayeonSans) - 본문, 버튼, 라벨, 영문 소제목. 굵기는 400, 500 두 가지
+  //   함렛(Hahmlet)        - 제목, 닉네임, 숫자. 굵기는 600 하나
+  //
+  // 파일에 없는 굵기(700, 900 등)를 주면 Flutter가 글자를 억지로 두껍게 그려서
+  // 획이 뭉개집니다. 그래서 여기 있는 굵기만 씁니다.
+  // ------------------------------------------------------------
   static const String sansFont = 'JayeonSans';
-
-  // 한글 세리프. 숫자 글꼴(DMSerif)에는 한글이 없어서 "3위"의 "위"를 이걸로 씁니다.
   static const String hangulSerifFont = 'Hahmlet';
 
+  // 예전 이름. 화면 곳곳에서 "제목 글꼴", "숫자 글꼴"이라는 뜻으로 부르고 있어서 남겨둡니다.
+  static const String koreanFont = sansFont; // 기본 글꼴
+  static const String numberFont = hangulSerifFont; // 숫자 글꼴
+
+  static const FontWeight sansRegular = FontWeight.w400;
+  static const FontWeight sansMedium = FontWeight.w500;
+  static const FontWeight serifWeight = FontWeight.w600;
+
+  // 숫자 (러닝 시간, 순위, 가격 ...)
   static const TextStyle number = TextStyle(
     fontFamily: numberFont,
+    fontWeight: serifWeight,
     height: 1.0,
   );
 
@@ -91,43 +100,86 @@ class AppTheme {
   // 한 글꼴로 이어집니다.
   static const TextStyle serifNumber = TextStyle(
     fontFamily: hangulSerifFont,
-    fontWeight: FontWeight.w600,
+    fontWeight: serifWeight,
     height: 1.0,
   );
 
   // 영문 소제목 (GOOD TO SEE YOU, LEVEL, MY RUNNER ...)
   static const TextStyle caption = TextStyle(
-    fontFamily: koreanFont,
+    fontFamily: sansFont,
     fontSize: 12,
-    fontWeight: FontWeight.w800,
+    fontWeight: sansMedium,
     letterSpacing: 2.4,
     color: AppColors.accent,
   );
 
-  // 글자 스타일 - 큰 숫자는 굵고 크게, 라벨은 작고 회색으로
+  // 글자 스타일 - 제목과 큰 숫자는 함렛, 본문과 라벨은 자연산스
   static const TextTheme _textTheme = TextTheme(
     displayLarge: TextStyle(
+      fontFamily: hangulSerifFont,
       fontSize: 64,
-      fontWeight: FontWeight.w900,
+      fontWeight: serifWeight,
       height: 1.0,
       letterSpacing: -2,
     ), // 러닝 시간 같은 메인 숫자
     headlineMedium: TextStyle(
+      fontFamily: hangulSerifFont,
       fontSize: 28,
-      fontWeight: FontWeight.w900,
+      fontWeight: serifWeight,
       letterSpacing: -0.5,
     ), // 화면 큰 제목
-    titleLarge: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-    titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-    bodyLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w400),
-    bodyMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
-    labelLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-    labelMedium: TextStyle(
+    headlineSmall: TextStyle(
+      fontFamily: hangulSerifFont,
+      fontSize: 22,
+      fontWeight: serifWeight,
+    ), // 대화상자 제목
+    titleLarge: TextStyle(
+      fontFamily: hangulSerifFont,
+      fontSize: 20,
+      fontWeight: serifWeight,
+    ),
+    titleMedium: TextStyle(
+      fontFamily: hangulSerifFont,
+      fontSize: 16,
+      fontWeight: serifWeight,
+    ),
+    titleSmall: TextStyle(
+      fontFamily: sansFont,
+      fontSize: 14,
+      fontWeight: sansMedium,
+    ),
+    bodyLarge: TextStyle(
+      fontFamily: sansFont,
+      fontSize: 16,
+      fontWeight: sansRegular,
+    ),
+    bodyMedium: TextStyle(
+      fontFamily: sansFont,
+      fontSize: 14,
+      fontWeight: sansRegular,
+    ),
+    bodySmall: TextStyle(
+      fontFamily: sansFont,
       fontSize: 12,
-      fontWeight: FontWeight.w600,
+      fontWeight: sansRegular,
+    ),
+    labelLarge: TextStyle(
+      fontFamily: sansFont,
+      fontSize: 16,
+      fontWeight: sansMedium,
+    ), // 버튼 글자
+    labelMedium: TextStyle(
+      fontFamily: sansFont,
+      fontSize: 12,
+      fontWeight: sansMedium,
       color: AppColors.mute,
       letterSpacing: 0.5,
     ), // 숫자 아래 작은 설명
+    labelSmall: TextStyle(
+      fontFamily: sansFont,
+      fontSize: 11,
+      fontWeight: sansMedium,
+    ),
   );
 
   static ThemeData light() {
@@ -153,7 +205,8 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      fontFamily: koreanFont,
+      // 위 textTheme에 적지 않은 곳(입력칸, 툴팁 등)도 자연산스로 나오게 합니다.
+      fontFamily: sansFont,
       scaffoldBackgroundColor: AppColors.white,
       // apply()는 모든 글자를 검은색으로 덮어쓰므로, 회색 라벨(labelMedium)은 원래 색으로 되돌립니다.
       textTheme: _textTheme
@@ -168,9 +221,9 @@ class AppTheme {
         titleTextStyle: TextStyle(
           // 여기에 글꼴을 적지 않으면 화면 제목만 기본 글꼴로 나옵니다.
           // ThemeData의 fontFamily는 textTheme에만 닿고 AppBarTheme에는 닿지 않습니다.
-          fontFamily: koreanFont,
+          fontFamily: hangulSerifFont,
           fontSize: 20,
-          fontWeight: FontWeight.w800,
+          fontWeight: serifWeight,
           color: AppColors.black,
         ),
       ),
@@ -216,7 +269,12 @@ class AppTheme {
       ),
       snackBarTheme: const SnackBarThemeData(
         backgroundColor: AppColors.black,
-        contentTextStyle: TextStyle(color: AppColors.white),
+        // 여기도 글꼴을 적어야 합니다. 스타일을 통째로 바꿔 끼우는 자리라 기본 글꼴로 돌아갑니다.
+        contentTextStyle: TextStyle(
+          fontFamily: sansFont,
+          fontSize: 14,
+          color: AppColors.white,
+        ),
         behavior: SnackBarBehavior.floating,
       ),
       dialogTheme: DialogThemeData(
