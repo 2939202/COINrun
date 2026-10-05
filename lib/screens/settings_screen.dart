@@ -1,11 +1,10 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
-import 'login_screen.dart';
+import 'account_screen.dart';
 import 'trash_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -23,214 +22,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isBgmEnabled = true;
   bool _isSfxEnabled = true;
 
-  bool _isDeleting = false; // 탈퇴 처리 중 (화면을 덮어 두 번 누르지 못하게)
-
   late final Stream<UserModel?> _userStream = UserRepository.instance.watchUser(
     widget.userId,
   );
 
-  void _toast(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  // 게스트 계정에 이메일을 붙입니다. uid가 그대로라 기록은 유지됩니다.
-  Future<void> _linkAccount() async {
-    final bool? linked = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const LoginScreen(mode: AuthMode.link),
-      ),
-    );
-    if (linked != true) return;
-
-    // 이제 게스트가 아니므로 랭킹에 올립니다.
-    // (ensureUser가 isGuest 변화를 보고 알아서 처리합니다)
-    final account = AuthService.instance.currentUser;
-    if (account != null) {
-      await UserRepository.instance.ensureUser(
-        widget.userId,
-        AuthService.defaultNickname(uid: account.uid, email: account.email),
-        isGuest: account.isAnonymous,
-      );
-    }
-
-    if (!mounted) return;
-    setState(() {}); // 계정 표시를 새로 그립니다.
-    _toast('계정이 저장되었습니다. 이제 랭킹에도 오르고, 다른 기기에서 이어서 할 수 있어요.');
-  }
-
-  Future<void> _signOut() async {
-    final bool isGuest = AuthService.instance.isGuest;
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('로그아웃할까요?'),
-        // 게스트는 로그아웃하면 돌아올 방법이 없어서 미리 알려줍니다.
-        content: Text(
-          isGuest
-              ? '게스트 계정은 로그아웃하면 다시 들어올 수 없어서 '
-                    '지금까지 모은 골드와 레벨이 사라집니다.\n'
-                    '먼저 "계정 저장하기"로 이메일을 붙여두는 것을 권합니다.'
-              : '다음에 같은 이메일로 로그인하면 기록이 그대로 남아 있습니다.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('로그아웃'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    await AuthService.instance.signOut();
-    // AuthGate가 로그인 화면으로 바꿔주므로, 위에 쌓인 화면만 걷어냅니다.
-    if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
-  }
-
-  // 회원 탈퇴 - 랭킹, 러닝 기록, 유저 문서, 계정 순서로 지웁니다.
-  Future<void> _deleteAccount() async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('정말 탈퇴할까요?'),
-        content: const Text(
-          '지금까지 모은 골드, 레벨, 러닝 기록이 모두 사라집니다.\n'
-          '되돌릴 수 없습니다.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('탈퇴하기', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _isDeleting = true);
-    try {
-      // 데이터를 먼저 지웁니다. 계정을 먼저 지우면 권한이 사라져서
-      // 남은 데이터를 지울 수 없게 됩니다.
-      await UserRepository.instance.deleteAccountData(widget.userId);
-      await AuthService.instance.deleteAccount();
-      // 성공하면 AuthGate가 로그인 화면으로 바꿔줍니다.
-    } on AuthException catch (error) {
-      if (!mounted) return;
-      setState(() => _isDeleting = false);
-      _toast(error.message);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _isDeleting = false);
-      _toast('탈퇴에 실패했습니다. 인터넷 연결을 확인해 주세요.');
-    }
-  }
-
-  Future<void> _editNickname(String current) async {
-    final String? name = await showDialog<String>(
-      context: context,
-      builder: (context) => NicknameDialog(current: current),
-    );
-
-    if (name == null || name == current) return;
-    await UserRepository.instance.updateNickname(widget.userId, name);
-    _toast('닉네임을 바꿨습니다.');
-  }
-
   @override
   Widget build(BuildContext context) {
-    final User? account = AuthService.instance.currentUser;
-    final bool isGuest = account?.isAnonymous ?? false;
-
-    if (_isDeleting) {
-      return const Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: AppSpacing.md),
-              Text('탈퇴 처리 중입니다...'),
-            ],
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
       appBar: AppBar(title: const Text('설정')),
       body: ListView(
         children: [
           // ------------------------------------------------------------
-          // 계정 정보 섹션
+          // 계정 - 닉네임, 비밀번호, 로그아웃, 탈퇴는 "사용자 설정" 안에 모아뒀습니다.
           // ------------------------------------------------------------
-          const _SectionHeader(title: '계정 정보'),
-
+          const SettingsSectionHeader(title: '계정'),
           StreamBuilder<UserModel?>(
             stream: _userStream,
             builder: (context, snapshot) {
+              final account = AuthService.instance.currentUser;
+              final bool isGuest = account?.isAnonymous ?? false;
               final String nickname = snapshot.data?.nickname ?? '-';
               return ListTile(
-                leading: const Icon(Icons.badge_outlined),
-                title: const Text('닉네임'),
-                subtitle: Text(nickname),
-                trailing: const Icon(Icons.edit_outlined),
-                onTap: snapshot.data == null
-                    ? null
-                    : () => _editNickname(nickname),
+                leading: const Icon(Icons.manage_accounts_outlined),
+                title: const Text('사용자 설정'),
+                subtitle: Text(
+                  '$nickname · ${isGuest ? '게스트' : (account?.email ?? '-')}',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AccountScreen(userId: widget.userId),
+                  ),
+                ),
               );
             },
-          ),
-
-          ListTile(
-            leading: Icon(
-              isGuest ? Icons.person_outline : Icons.account_circle,
-            ),
-            title: Text(isGuest ? '게스트로 이용 중' : '이메일 계정'),
-            subtitle: Text(
-              isGuest
-                  ? '이메일을 붙이면 폰을 바꿔도 이어서 할 수 있어요.'
-                  : (account?.email ?? '-'),
-            ),
-            trailing: isGuest
-                ? ElevatedButton(
-                    onPressed: _linkAccount,
-                    child: const Text('계정 저장하기'),
-                  )
-                : null,
-          ),
-
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('로그아웃'),
-            onTap: _signOut,
-          ),
-          ListTile(
-            leading: const Icon(
-              Icons.person_remove_outlined,
-              color: Colors.red,
-            ),
-            title: const Text('회원 탈퇴', style: TextStyle(color: Colors.red)),
-            subtitle: const Text('계정과 기록을 모두 지웁니다'),
-            onTap: _deleteAccount,
           ),
           const Divider(),
 
           // ------------------------------------------------------------
           // 기록 관리
           // ------------------------------------------------------------
-          const _SectionHeader(title: '기록'),
+          const SettingsSectionHeader(title: '기록'),
           StreamBuilder<UserModel?>(
             stream: _userStream,
             builder: (context, snapshot) {
@@ -273,7 +106,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // ------------------------------------------------------------
           // 사운드 및 환경 설정 섹션
           // ------------------------------------------------------------
-          const _SectionHeader(title: '사운드 설정'),
+          const SettingsSectionHeader(title: '사운드 설정'),
           SwitchListTile(
             secondary: const Icon(Icons.music_note),
             title: const Text('배경음악 (BGM)'),
@@ -299,7 +132,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // ------------------------------------------------------------
           // 앱 정보 및 서비스 관리 섹션
           // ------------------------------------------------------------
-          const _SectionHeader(title: '앱 정보'),
+          const SettingsSectionHeader(title: '앱 정보'),
           const ListTile(
             leading: Icon(Icons.info_outline),
             title: Text('앱 버전'),
@@ -384,11 +217,11 @@ class _NicknameDialogState extends State<NicknameDialog> {
   }
 }
 
-// 섹션 헤더 위젯
-class _SectionHeader extends StatelessWidget {
+// 섹션 헤더 위젯 (사용자 설정 화면도 같이 씁니다)
+class SettingsSectionHeader extends StatelessWidget {
   final String title;
 
-  const _SectionHeader({required this.title});
+  const SettingsSectionHeader({super.key, required this.title});
 
   @override
   Widget build(BuildContext context) {
@@ -396,10 +229,10 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Text(
         title,
-        style: TextStyle(
+        style: AppTheme.sans.copyWith(
           fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: Theme.of(context).colorScheme.primary,
+          fontWeight: AppTheme.sansMedium,
+          color: AppColors.accentDeep,
         ),
       ),
     );

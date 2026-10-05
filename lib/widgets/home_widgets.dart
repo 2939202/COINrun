@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../game/equipment_rules.dart';
+import '../game/pvp_battle.dart';
+import '../game/run_insights.dart';
 import '../game/run_rules.dart';
 import '../models/ranking_entry.dart';
 import '../models/user_model.dart';
@@ -446,38 +448,121 @@ class DoubleRule extends StatelessWidget {
   }
 }
 
-// 내 캐릭터 / 랭킹 두 장
-class ShortcutsRow extends StatelessWidget {
+// 홈 가운데의 네모 카드들. 옆으로 넘겨 봅니다.
+//
+//   [롤 플레잉] [내 캐릭터] [AI 평가] [랭킹]
+//
+// 화면에는 언제나 두 장이 꽉 차게 보이고, 한 번 밀면 한 장씩 넘어갑니다.
+// 처음에는 내 캐릭터와 AI 평가가 보입니다. 랭킹은 오른쪽으로 한 번,
+// 롤 플레잉은 왼쪽으로 한 번 넘겨야 보입니다.
+class ShortcutsCarousel extends StatefulWidget {
   final UserModel user;
+  final Stream<InsightReport> weekInsight;
+  final VoidCallback onPvp;
   final VoidCallback onCharacter;
+  final VoidCallback onAiReport;
   final VoidCallback onRanking;
 
-  const ShortcutsRow({
+  const ShortcutsCarousel({
     super.key,
     required this.user,
+    required this.weekInsight,
+    required this.onPvp,
     required this.onCharacter,
+    required this.onAiReport,
     required this.onRanking,
   });
 
+  // 정사각형보다 살짝 눌린 가로 직사각형
+  static const double height = 150;
+  static const int cardCount = 4;
+
+  // 처음 화면 왼쪽에 오는 카드 (0: 롤 플레잉, 1: 내 캐릭터)
+  static const int firstPage = 1;
+
+  @override
+  State<ShortcutsCarousel> createState() => _ShortcutsCarouselState();
+}
+
+class _ShortcutsCarouselState extends State<ShortcutsCarousel> {
+  // 한 페이지 = 화면 폭의 절반 = 카드 한 장. 그래서 두 장씩 보이고 한 장씩 넘어갑니다.
+  late final PageController _pages = PageController(
+    viewportFraction: 0.5,
+    initialPage: ShortcutsCarousel.firstPage,
+  );
+  int _page = ShortcutsCarousel.firstPage;
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    // 정사각형보다 살짝 눌린 가로 직사각형
-    return SizedBox(
-      height: 150,
-      child: Row(
-        children: [
-          Expanded(
-            child: RunnerCard(user: user, onTap: onCharacter),
+    final List<Widget> cards = [
+      PvpCard(user: widget.user, onTap: widget.onPvp),
+      RunnerCard(user: widget.user, onTap: widget.onCharacter),
+      AiReportCard(report: widget.weekInsight, onTap: widget.onAiReport),
+      RankingCard(onTap: widget.onRanking),
+    ];
+    // 두 장이 한 화면이라, 멈출 수 있는 자리는 카드 수 - 1개입니다.
+    const int positions = ShortcutsCarousel.cardCount - 1;
+
+    return Column(
+      children: [
+        SizedBox(
+          height: ShortcutsCarousel.height,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // 카드마다 양옆에 gap/2씩 여백을 줍니다. 그러면 바깥쪽 카드 가장자리가
+              // 화면 여백보다 gap/2 안쪽으로 들어가므로, 그만큼 넓혀서 다른 줄과 맞춥니다.
+              const double gap = AppSpacing.md;
+              return OverflowBox(
+                maxWidth: constraints.maxWidth + gap,
+                minWidth: constraints.maxWidth + gap,
+                child: PageView(
+                  controller: _pages,
+                  padEnds: false,
+                  onPageChanged: (page) => setState(() => _page = page),
+                  children: [
+                    for (final card in cards)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: gap / 2,
+                        ),
+                        child: card,
+                      ),
+                  ],
+                ),
+              );
+            },
           ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(child: RankingCard(onTap: onRanking)),
-        ],
-      ),
+        ),
+        const SizedBox(height: AppSpacing.sm + 2),
+        // 지금 어디쯤 보고 있는지 점으로 보여줍니다.
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (int i = 0; i < positions; i++)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: i == _page ? 18 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: i == _page ? AppColors.black : AppColors.sand,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }
 
-// 내 캐릭터 / 랭킹 카드가 같이 쓰는 모양과 글자
+// 홈 네모 카드들이 같이 쓰는 모양과 글자
 BoxDecoration _shortcutDecoration(Color color) {
   return BoxDecoration(
     color: color,
@@ -631,6 +716,172 @@ class RankingCardState extends State<RankingCard> {
               },
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// 롤 플레잉(PVP) 카드. 검은 바탕에 겨루는 사람 무늬
+class PvpCard extends StatelessWidget {
+  final UserModel user;
+  final VoidCallback onTap;
+
+  const PvpCard({super.key, required this.user, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final Fighter me = Fighter(
+      id: '',
+      name: user.nickname,
+      level: user.level,
+      totalKm: user.totalDistance / 1000,
+    );
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: _shortcutDecoration(AppColors.black),
+        child: Stack(
+          children: [
+            const Positioned(
+              right: -18,
+              bottom: -18,
+              child: Icon(
+                Icons.sports_kabaddi,
+                size: 120,
+                color: AppColors.inkSoft,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'ROLE PLAYING',
+                    style: _shortcutCaption.copyWith(
+                      color: AppColors.accentOnDark,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    '롤 플레잉',
+                    style: _shortcutTitle.copyWith(color: AppColors.white),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'PVP 대결',
+                    style: _shortcutSub.copyWith(color: AppColors.sandOnDark),
+                  ),
+                  const Spacer(),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${me.power}',
+                        style: AppTheme.serifNumber.copyWith(
+                          fontSize: 26,
+                          color: AppColors.accentOnDark,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Flexible(
+                        child: Text(
+                          '전투력',
+                          style: _shortcutSub.copyWith(
+                            fontSize: 12,
+                            color: AppColors.sandOnDark,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// AI 평가 카드. 이번 주 등급과 한 줄 평을 보여줍니다.
+class AiReportCard extends StatelessWidget {
+  final Stream<InsightReport> report;
+  final VoidCallback onTap;
+
+  const AiReportCard({super.key, required this.report, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        // 랭킹 카드와 같은 흰 바탕
+        decoration: _shortcutDecoration(AppColors.white),
+        child: StreamBuilder<InsightReport>(
+          stream: report,
+          builder: (context, snapshot) {
+            final textTheme = Theme.of(context).textTheme;
+            final InsightReport? data = snapshot.data;
+            final bool empty = data == null || !data.hasAnyRun;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('AI REPORT', style: _shortcutCaption),
+                const SizedBox(height: AppSpacing.sm),
+                Text('AI 평가', style: _shortcutTitle),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  data?.headline ?? '주간·월간 분석',
+                  style: _shortcutSub,
+                  // 카드 높이가 정해져 있어서 한 줄만. 전체 문장은 AI 평가 화면에 있습니다.
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const Spacer(),
+                Container(height: 1, color: AppColors.sand),
+                const SizedBox(height: AppSpacing.sm),
+                // 등급 없이 이번 주 숫자만 보여줍니다. (랭킹 카드 아랫줄과 같은 모양)
+                if (empty)
+                  Text(
+                    '기록이 쌓이면 평가해요',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: AppColors.mute,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '이번 주',
+                          style: textTheme.titleMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        data.current.km.toStringAsFixed(1),
+                        style: AppTheme.number.copyWith(fontSize: 17),
+                      ),
+                      Text(' km', style: textTheme.labelMedium),
+                      const SizedBox(width: AppSpacing.sm),
+                      Text(
+                        '${data.current.runs}',
+                        style: AppTheme.number.copyWith(fontSize: 17),
+                      ),
+                      Text(' 회', style: textTheme.labelMedium),
+                    ],
+                  ),
+              ],
+            );
+          },
         ),
       ),
     );

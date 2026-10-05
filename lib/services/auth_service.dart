@@ -61,6 +61,51 @@ class AuthService {
     return _guard(() => user.linkWithCredential(credential));
   }
 
+  // 비밀번호를 다시 정하는 링크를 메일로 보냅니다.
+  //
+  // Firebase는 기본 설정(이메일 열거 보호)에서 가입 안 된 이메일이어도 오류 없이 끝납니다.
+  // 남의 가입 여부를 캐볼 수 없게 하려는 것이라, 화면에서도 "가입된 이메일이면 메일이 갑니다"로 안내합니다.
+  Future<void> sendPasswordReset(String email) async {
+    try {
+      await _auth.setLanguageCode('ko'); // 메일을 한국어로 받습니다.
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException catch (error) {
+      throw AuthException(_messageFor(error.code));
+    }
+  }
+
+  // 로그인한 상태에서 비밀번호를 바꿉니다.
+  //
+  // 지금 비밀번호를 한 번 더 확인합니다. 폰을 잠시 남이 들고 있어도 비밀번호를
+  // 바꿔버릴 수 없게 하려는 것이고, Firebase도 로그인한 지 오래됐으면 확인 없이는
+  // 바꿔주지 않습니다(requires-recent-login).
+  Future<void> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    final User? user = _auth.currentUser;
+    final String? email = user?.email;
+    if (user == null || email == null || user.isAnonymous) {
+      throw const AuthException('이메일 계정으로 로그인해야 바꿀 수 있습니다.');
+    }
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: currentPassword),
+      );
+    } on FirebaseAuthException catch (error) {
+      if (error.code == 'wrong-password' ||
+          error.code == 'invalid-credential') {
+        throw const AuthException('지금 비밀번호가 맞지 않습니다.');
+      }
+      throw AuthException(_messageFor(error.code));
+    }
+    try {
+      await user.updatePassword(newPassword);
+    } on FirebaseAuthException catch (error) {
+      throw AuthException(_messageFor(error.code));
+    }
+  }
+
   Future<void> signOut() => _auth.signOut();
 
   // 계정 자체를 없앱니다. Firestore 데이터는 UserRepository가 먼저 지웁니다.
@@ -115,6 +160,8 @@ class AuthService {
         return '이미 다른 계정에 쓰이고 있는 이메일입니다.';
       case 'weak-password':
         return '비밀번호는 6자 이상으로 정해 주세요.';
+      case 'missing-email':
+        return '이메일을 입력해 주세요.';
       case 'user-not-found':
       case 'wrong-password':
       case 'invalid-credential':

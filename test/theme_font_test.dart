@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:contact/theme/app_theme.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -11,9 +14,6 @@ void main() {
     test('제목과 큰 숫자는 함렛', () {
       for (final entry in {
         'displayLarge': t.displayLarge,
-        'displayMedium': t.displayMedium,
-        'displaySmall': t.displaySmall,
-        'headlineLarge': t.headlineLarge,
         'headlineMedium': t.headlineMedium,
         'headlineSmall': t.headlineSmall,
         'titleLarge': t.titleLarge,
@@ -45,7 +45,8 @@ void main() {
       }
     });
 
-    // ThemeData의 fontFamily는 textTheme에만 닿습니다. AppBar는 따로 적어야 합니다.
+    // ThemeData의 fontFamily는 textTheme에만 닿습니다. 스타일을 통째로 바꿔 끼우는
+    // 자리(AppBar 제목, 버튼, 스낵바)는 따로 적어야 합니다.
     test('화면 제목(AppBar)은 함렛', () {
       expect(
         theme.appBarTheme.titleTextStyle?.fontFamily,
@@ -53,11 +54,25 @@ void main() {
       );
     });
 
+    test('버튼 글자도 자연산스', () {
+      final elevated = theme.elevatedButtonTheme.style?.textStyle?.resolve({});
+      final outlined = theme.outlinedButtonTheme.style?.textStyle?.resolve({});
+      expect(elevated?.fontFamily, AppTheme.sansFont);
+      expect(outlined?.fontFamily, AppTheme.sansFont);
+    });
+
+    test('스낵바 글자도 자연산스', () {
+      expect(
+        theme.snackBarTheme.contentTextStyle?.fontFamily,
+        AppTheme.sansFont,
+      );
+    });
+
     test('영문 소제목은 자연산스', () {
       expect(AppTheme.caption.fontFamily, AppTheme.sansFont);
     });
 
-    test('큰 숫자는 함렛', () {
+    test('숫자는 함렛', () {
       expect(AppTheme.number.fontFamily, AppTheme.hangulSerifFont);
       // copyWith로 크기나 색을 바꿔도 글꼴은 남아야 합니다.
       expect(
@@ -65,5 +80,43 @@ void main() {
         AppTheme.hangulSerifFont,
       );
     });
+
+    // 파일에 없는 굵기를 주면 획이 억지로 두꺼워져 뭉개집니다.
+    test('글꼴 파일에 있는 굵기만 쓴다', () {
+      final sansWeights = [FontWeight.w400, FontWeight.w500];
+      for (final style in [
+        t.titleSmall,
+        t.bodyLarge,
+        t.bodyMedium,
+        t.bodySmall,
+        t.labelLarge,
+        t.labelMedium,
+        t.labelSmall,
+      ]) {
+        expect(sansWeights, contains(style?.fontWeight));
+      }
+      for (final style in [
+        t.displayLarge,
+        t.headlineMedium,
+        t.headlineSmall,
+        t.titleLarge,
+        t.titleMedium,
+      ]) {
+        expect(style?.fontWeight, FontWeight.w600);
+      }
+    });
+  });
+
+  // 예전 글꼴(조선굵은명조, DM Serif)을 다시 쓰는 곳이 생기지 않게 막습니다.
+  test('코드에 예전 글꼴 이름이 남아 있지 않다', () {
+    final found = <String>[];
+    for (final file in Directory('lib').listSync(recursive: true)) {
+      if (file is! File || !file.path.endsWith('.dart')) continue;
+      final String text = file.readAsStringSync();
+      if (text.contains("'ChosunKm'") || text.contains("'DMSerif'")) {
+        found.add(file.path);
+      }
+    }
+    expect(found, isEmpty);
   });
 }

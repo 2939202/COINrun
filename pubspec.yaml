@@ -51,13 +51,14 @@ flutter:
   uses-material-design: true
 
   fonts:
-    # 본문, 라벨, 영문 소제목
+    # 글꼴은 두 가지만 씁니다. (lib/theme/app_theme.dart 참고)
+    # 본문, 버튼, 라벨, 영문 소제목
     - family: JayeonSans
       fonts:
         - asset: assets/fonts/JayeonSans-Regular.ttf
         - asset: assets/fonts/JayeonSans-Medium.ttf
           weight: 500
-    # 제목, 닉네임, 큰 숫자
+    # 제목, 닉네임, 숫자
     - family: Hahmlet
       fonts:
         # Regular는 획이 가늘어 굵은 숫자 옆에서 고딕처럼 보입니다. SemiBold가 맞습니다.

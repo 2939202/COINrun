@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import '../models/course.dart';
 import '../services/course_repository.dart';
 import '../services/seoul_districts.dart';
+import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/course_widgets.dart';
 import '../widgets/run_app_bar.dart';
@@ -105,7 +106,9 @@ class _CourseScreenState extends State<CourseScreen> {
     );
   }
 
+  // 러닝으로 돌아가면 홈의 "시작"도 다시 러닝으로 갑니다.
   void _swap() {
+    UserRepository.instance.setPrefersCourseRun(widget.userId, false);
     Navigator.pushReplacement(
       context,
       slideFromRight(RunScreen(userId: widget.userId)),

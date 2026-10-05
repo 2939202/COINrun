@@ -41,6 +41,15 @@ class RunTracker {
   // 그대로 더합니다. 그보다 길게 끊겼으면 믿지 않고 경로를 끊습니다.
   static const double maxJumpMeters = 200;
 
+  // 이보다 빠르게 움직인 구간은 달린 것으로 치지 않습니다. 7m/s = 시속 25.2km
+  //
+  // 사람이 몇 분 이상 낼 수 있는 속도를 넉넉히 넘는 값입니다. (마라톤 세계 기록이 약 5.7m/s)
+  // 차나 빠른 자전거로 이동하면서 거리·경험치·코스 코인을 모으는 것을 막습니다.
+  // 걸음 센서가 없는 폰은 걸음을 거리로 추정하므로, 여기서 뺀 거리는 골드에도 들어가지 않습니다.
+  //
+  // GPS가 순간적으로 튀어 생기는 가짜 고속 구간도 같이 걸러집니다.
+  static const double maxRunningSpeed = 7.0;
+
   // 걸음 센서가 없을 때 쓰는 평균 보폭 (m)
   static const double estimatedStrideMeters = 0.75;
 
@@ -59,6 +68,15 @@ class RunTracker {
   // 너무 멀어서 버린 점프 횟수. 화면 아래 진단 줄에 보여줍니다.
   int _rejectedJumps = 0;
 
+  // 너무 빨라서 뺀 구간 수와 거리. 화면 안내와 진단 줄에 씁니다.
+  int _tooFastCount = 0;
+  double _tooFastMeters = 0;
+  bool _lastWasTooFast = false;
+
+  // 개발자 모드 조이스틱은 한 번에 5m씩 순간이동해서 속도 제한에 늘 걸립니다.
+  // 시연이 되도록 조이스틱을 쓰는 동안만 끕니다.
+  bool enforceSpeedLimit = true;
+
   bool _hasStepSensor = false;
   int? _latestSensorSteps;
   int? _segmentStartSteps; // 시작/재개한 순간의 센서 값
@@ -66,6 +84,11 @@ class RunTracker {
 
   RunState get state => _state;
   int get rejectedJumps => _rejectedJumps;
+  int get tooFastCount => _tooFastCount;
+  double get tooFastMeters => _tooFastMeters;
+
+  // 방금 들어온 위치가 너무 빨라서 빠졌는지. 이때는 코스 코인도 먹지 않습니다.
+  bool get lastWasTooFast => _lastWasTooFast;
 
   // 지도에 그릴 때 씁니다. 토막마다 선을 따로 그으면 끊긴 구간이 이어지지 않습니다.
   List<List<LatLng>> get segments => _segments;
@@ -112,6 +135,9 @@ class RunTracker {
             [startPoint],
           ];
     _rejectedJumps = 0;
+    _tooFastCount = 0;
+    _tooFastMeters = 0;
+    _lastWasTooFast = false;
     _lastPoint = startPoint;
     _lastTime = now;
     _stepsBeforeSegment = 0;
@@ -184,6 +210,7 @@ class RunTracker {
 
     _lastPoint = point;
     _lastTime = time;
+    _lastWasTooFast = false;
 
     // 너무 멀리 건너뛴 점은 지나온 길로 치지 않습니다. (maxJumpMeters 설명 참고)
     if (meters > maxJumpMeters) {
@@ -192,15 +219,28 @@ class RunTracker {
       return;
     }
 
+    final Duration gap = previousTime == null
+        ? Duration.zero
+        : time.difference(previousTime);
+    final double? speed = gap > Duration.zero
+        ? meters / (gap.inMilliseconds / 1000)
+        : null;
+
+    // 달리는 속도가 아니면 거리·시간에 넣지 않고, 지도에도 잇지 않습니다.
+    // (차로 지나간 길이 달린 길처럼 그려지면 안 됩니다)
+    if (enforceSpeedLimit && speed != null && speed > maxRunningSpeed) {
+      _tooFastCount += 1;
+      _tooFastMeters += meters;
+      _lastWasTooFast = true;
+      _segments.add([point]);
+      return;
+    }
+
     _distance += meters;
     if (_segments.isEmpty) _segments.add([]);
     _segments.last.add(point);
 
-    if (previousTime == null) return;
-    final Duration gap = time.difference(previousTime);
-    if (gap <= Duration.zero || gap > maxGap) return;
-
-    final double speed = meters / (gap.inMilliseconds / 1000);
+    if (speed == null || gap > maxGap) return;
     if (speed >= minMovingSpeed) _movingTime += gap;
   }
 

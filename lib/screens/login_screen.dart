@@ -92,6 +92,21 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _startAsGuest() =>
       _run(() => AuthService.instance.signInAsGuest());
 
+  // 로그인 칸에 적어둔 이메일을 그대로 들고 갑니다. 다시 칠 필요가 없게요.
+  Future<void> _forgotPassword() async {
+    final bool? sent = await showDialog<bool>(
+      context: context,
+      builder: (context) => PasswordResetDialog(initialEmail: _email.text),
+    );
+    if (sent == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('가입된 이메일이면 비밀번호 재설정 메일이 갑니다. 받은편지함(스팸함까지) 확인해 주세요.'),
+        ),
+      );
+    }
+  }
+
   // 버튼 잠그기 + 오류 메시지 처리를 한곳에서 합니다.
   Future<void> _run(Future<void> Function() action) async {
     if (_isBusy) return;
@@ -182,6 +197,15 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
 
+            if (_mode == AuthMode.signIn)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _isBusy ? null : _forgotPassword,
+                  child: const Text('비밀번호를 잊으셨나요?'),
+                ),
+              ),
+
             if (!_isLinking) ...[
               TextButton(
                 onPressed: _isBusy
@@ -226,6 +250,117 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// 비밀번호 찾기 창
+//
+// 링크가 든 메일을 보내고, 사용자는 메일의 링크에서 새 비밀번호를 정합니다.
+// (앱 안에서 새 비밀번호를 받지 않습니다. 본인 메일함에 들어갈 수 있어야 본인이 맞다고 보는 방식입니다)
+// 보내는 데 성공하면 true로 닫힙니다.
+class PasswordResetDialog extends StatefulWidget {
+  final String initialEmail;
+
+  const PasswordResetDialog({super.key, this.initialEmail = ''});
+
+  @override
+  State<PasswordResetDialog> createState() => _PasswordResetDialogState();
+}
+
+class _PasswordResetDialogState extends State<PasswordResetDialog> {
+  late final TextEditingController _email = TextEditingController(
+    text: widget.initialEmail.trim(),
+  );
+
+  bool _isBusy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final String email = _email.text.trim();
+    if (email.isEmpty) {
+      setState(() => _error = '이메일을 입력해 주세요.');
+      return;
+    }
+    if (!email.contains('@')) {
+      setState(() => _error = '이메일 형식이 올바르지 않습니다.');
+      return;
+    }
+
+    setState(() {
+      _isBusy = true;
+      _error = null;
+    });
+    try {
+      await AuthService.instance.sendPasswordReset(email);
+      if (mounted) Navigator.pop(context, true);
+      return;
+    } on AuthException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = '잠시 후 다시 시도해 주세요.');
+    }
+    if (mounted) setState(() => _isBusy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
+    return AlertDialog(
+      title: const Text('비밀번호 찾기'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '가입한 이메일을 적어주세요. 새 비밀번호를 정하는 링크를 보내드려요.',
+            style: textTheme.bodyMedium?.copyWith(color: AppColors.mute),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _email,
+            enabled: !_isBusy,
+            autofocus: widget.initialEmail.trim().isEmpty,
+            keyboardType: TextInputType.emailAddress,
+            autocorrect: false,
+            onSubmitted: (_) => _send(),
+            decoration: const InputDecoration(
+              labelText: '이메일',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              _error!,
+              style: textTheme.bodyMedium?.copyWith(color: Colors.red),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isBusy ? null : () => Navigator.pop(context, false),
+          child: const Text('취소'),
+        ),
+        ElevatedButton(
+          onPressed: _isBusy ? null : _send,
+          child: _isBusy
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('메일 보내기'),
+        ),
+      ],
     );
   }
 }
