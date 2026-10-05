@@ -16,7 +16,9 @@ import 'settings_screen.dart'; //설정
 
 // ============================================================
 // 홈 화면
-//   인사 -> 레벨 카드 -> 누적 기록 -> 캐릭터/랭킹 -> 최근 러닝
+//   인사 -> 레벨 카드 -> 누적 기록 -> 캐릭터/랭킹 -> 최근 러닝(1개)
+//   최근 러닝은 1개만 보여줘서 홈 화면이 거의 스크롤 없이 한 화면에 들어오게 합니다.
+//   나머지는 "전체 기록"에서 봅니다.
 //   화면 맨 아래에는 "러닝 시작" 버튼이 항상 고정되어 있습니다.
 // ============================================================
 class MainScreen extends StatefulWidget {
@@ -134,7 +136,9 @@ class _MainScreenState extends State<MainScreen> {
         StreamBuilder<List<RunLog>>(
           stream: _recentRunsStream,
           builder: (context, snapshot) {
-            final List<RunLog> runs = snapshot.data ?? [];
+            // 감춘 기록은 받아온 뒤에 걸러지므로, 3개를 받아 그중 맨 앞 1개만 씁니다.
+            // 처음부터 1개만 받으면 그게 감춘 기록일 때 빈칸이 됩니다.
+            final List<RunLog> runs = (snapshot.data ?? []).take(1).toList();
             if (runs.isEmpty) {
               return DashedBox(
                 child: Center(
@@ -167,11 +171,12 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildStartButton() {
     return SafeArea(
+      // 아래 여백: 내비게이션 바에 바싹 붙는 기종이 있어서 넉넉하게 둡니다.
       minimum: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
         AppSpacing.sm,
         AppSpacing.lg,
-        AppSpacing.md,
+        AppTheme.bottomButtonGap,
       ),
       // 시작 버튼만 둥근 모양입니다. 모서리를 자른 팔각형은 검은 카드들이 씁니다.
       child: Material(

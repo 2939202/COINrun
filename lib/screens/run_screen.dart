@@ -790,7 +790,7 @@ class _RunScreenState extends State<RunScreen> {
         AppSpacing.lg,
         AppSpacing.md,
         AppSpacing.lg,
-        AppSpacing.md,
+        AppTheme.bottomButtonGap,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1141,6 +1141,7 @@ class _GpsDiagnostics extends StatelessWidget {
       ),
       child: DefaultTextStyle(
         style: const TextStyle(
+          fontFamily: AppTheme.sansFont,
           color: AppColors.white,
           fontSize: 11,
           height: 1.35,

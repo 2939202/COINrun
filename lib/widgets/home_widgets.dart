@@ -461,8 +461,9 @@ class ShortcutsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 정사각형보다 살짝 눌린 가로 직사각형
     return SizedBox(
-      height: 168,
+      height: 150,
       child: Row(
         children: [
           Expanded(
@@ -519,18 +520,18 @@ class RunnerCard extends StatelessWidget {
             // 캐릭터는 오른쪽 아래에 붙여서 얼굴만 나오게 잘립니다.
             Positioned(
               right: -44,
-              bottom: -192,
+              bottom: -205,
               width: 170,
               height: 300,
               child: const RunnerFigure(showGround: false),
             ),
             Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
+              padding: const EdgeInsets.all(AppSpacing.md - 2),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('MY RUNNER', style: _shortcutCaption),
-                  const SizedBox(height: AppSpacing.sm),
+                  const SizedBox(height: AppSpacing.xs + 2),
                   Text('내 캐릭터', style: _shortcutTitle),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
@@ -567,19 +568,19 @@ class RankingCardState extends State<RankingCard> {
     return GestureDetector(
       onTap: widget.onTap,
       child: Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: const EdgeInsets.all(AppSpacing.md - 2),
         decoration: _shortcutDecoration(AppColors.white),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('RANKING', style: _shortcutCaption),
-            const SizedBox(height: AppSpacing.sm),
+            const SizedBox(height: AppSpacing.xs + 2),
             Text('랭킹', style: _shortcutTitle),
             const SizedBox(height: AppSpacing.xs),
             Text('전체 순위 보기', style: _shortcutSub),
             const Spacer(),
             Container(height: 1, color: AppColors.sand),
-            const SizedBox(height: AppSpacing.sm),
+            const SizedBox(height: AppSpacing.xs + 2),
 
             // 1등만 살짝 보여줍니다.
             StreamBuilder<List<RankingEntry>>(
@@ -615,13 +616,14 @@ class RankingCardState extends State<RankingCard> {
                     Expanded(
                       child: Text(
                         first.nickname,
-                        style: textTheme.titleMedium,
+                        style: textTheme.titleMedium?.copyWith(fontSize: 14),
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     Text(
                       formatKm(first.totalDistance),
-                      style: AppTheme.number.copyWith(fontSize: 17),
+                      style: AppTheme.number.copyWith(fontSize: 15),
                     ),
                     Text(' km', style: textTheme.labelMedium),
                   ],
