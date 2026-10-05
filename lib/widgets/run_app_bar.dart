@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/user_model.dart';
@@ -49,7 +51,7 @@ class RunAppBar extends StatelessWidget implements PreferredSizeWidget {
 // 한 번 바꾸면 홈의 "시작"도 그 쪽으로 고정되는 중요한 버튼이라 눈에 띄게 만듭니다.
 //   - 바탕: 밝은 금 -> 짙은 금을 여러 번 오가는 대각선 그라데이션 (금속 반사)
 //   - 테두리: 짙은 구리빛 금 바깥선 + 안쪽 밝은 하이라이트 선 (도드라진 느낌)
-//   - 반짝임: 몇 초마다 흰 빛줄기가 왼쪽 위에서 오른쪽 아래로 한 번 쓸고 지나갑니다
+//   - 반짝임: 30초마다 흰 빛줄기가 왼쪽 위에서 오른쪽 아래로 한 번 쓸고 지나갑니다
 class SwapModeButton extends StatefulWidget {
   final VoidCallback onTap;
 
@@ -63,14 +65,26 @@ class _SwapModeButtonState extends State<SwapModeButton>
     with SingleTickerProviderStateMixin {
   static const double _size = 38;
 
-  // 앞 0.7초 동안 빛줄기가 지나가고, 나머지는 쉽니다.
+  // 30초에 한 번 0.7초 동안 빛줄기가 지나갑니다. 너무 자주 반짝이면 정신없습니다.
+  // 쉬는 동안에는 애니메이션을 멈춰 둬서 화면을 다시 그리지 않습니다.
+  static const Duration _shineEvery = Duration(seconds: 30);
+  static const Duration _shineFor = Duration(milliseconds: 700);
+
   late final AnimationController _shine = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 3200),
-  )..repeat();
+    duration: _shineFor,
+  )..forward(); // 화면에 처음 나올 때 한 번
+  late final Timer _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(_shineEvery, (_) => _shine.forward(from: 0));
+  }
 
   @override
   void dispose() {
+    _timer.cancel();
     _shine.dispose();
     super.dispose();
   }
@@ -128,7 +142,7 @@ class _SwapModeButtonState extends State<SwapModeButton>
               AnimatedBuilder(
                 animation: _shine,
                 builder: (context, _) {
-                  final double t = (_shine.value / 0.22).clamp(0.0, 1.0);
+                  final double t = _shine.value;
                   if (t >= 1) return const SizedBox.shrink();
                   final double x = -1.6 + 3.2 * t;
                   return DecoratedBox(

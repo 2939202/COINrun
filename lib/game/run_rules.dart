@@ -1,6 +1,7 @@
 import '../models/equipment_set.dart';
 import '../models/run_record.dart';
 import 'equipment_rules.dart';
+import 'run_grade.dart';
 
 // ============================================================
 // 게임 규칙: 러닝 기록 -> 골드/경험치/레벨
@@ -36,10 +37,18 @@ class RunRules {
   static const int expPerMovingMinute = 10;
   static const int stepsPerGold = 10;
 
+  // 빠르게 달릴수록 경험치를 조금 더 줍니다. 걷기(12분/km)는 그대로,
+  // 5분/km 이상으로 빠르면 최대 30% 더. 그 사이는 고르게 늘어납니다.
+  static const double maxPaceBonus = 0.3;
+
   // gear: 러닝을 마친 시점에 입고 있던 장비 세트. 맨몸이면 null입니다.
   static int expFor(RunRecord run, {EquipmentSet? gear}) {
-    final int base = run.movingTime.inSeconds * expPerMovingMinute ~/ 60;
-    return EquipmentRules.applyExpBonus(base, gear);
+    final double paced =
+        run.movingTime.inSeconds *
+        expPerMovingMinute /
+        60 *
+        (1 + maxPaceBonus * RunGrade.paceScore(run));
+    return EquipmentRules.applyExpBonus(paced.floor(), gear);
   }
 
   static int goldFor(RunRecord run, {EquipmentSet? gear}) {

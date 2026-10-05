@@ -62,7 +62,7 @@ void main() {
       );
       expect(report.score, 0);
       expect(report.hasAnyRun, isFalse);
-      expect(report.headline, '아직 분석할 기록이 없어요');
+      expect(report.headline, '아직 분석할 기록이 없습니다.');
       expect(report.comments, isNotEmpty);
     });
 
@@ -129,7 +129,7 @@ void main() {
       );
       expect(
         report.comments.any(
-          (c) => c.tone == InsightTone.warn && c.text.contains('무리'),
+          (c) => c.tone == InsightTone.warn && c.text.contains('부담'),
         ),
         isTrue,
       );
@@ -144,7 +144,7 @@ void main() {
         ]),
         now: wednesday,
       );
-      expect(report.comments.any((c) => c.text.contains('60초 빨리')), isTrue);
+      expect(report.comments.any((c) => c.text.contains('60초 빠르게')), isTrue);
     });
 
     test('이번 주에 안 뛰었으면 시작을 권한다', () {
@@ -153,7 +153,7 @@ void main() {
         statsByKey: weeks([week('w2026-09-28')]),
         now: wednesday,
       );
-      expect(report.headline, '이번 주는 아직 출발 전이에요');
+      expect(report.headline, '이번 주는 아직 기록이 없습니다.');
     });
   });
 }

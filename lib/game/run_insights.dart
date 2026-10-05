@@ -106,6 +106,37 @@ class InsightReport {
       progress <= 0 ? current.km : current.km / progress.clamp(0.15, 1.0);
 
   bool get hasAnyRun => periods.any((period) => period.active);
+
+  // AI 비서가 쓴 문장. null이면 위의 규칙 문장을 그대로 씁니다.
+  // 점수는 늘 규칙으로 계산하고, 문장만 바꿔 끼웁니다.
+  bool get writtenByAi => false;
+
+  InsightReport withWords({
+    required String headline,
+    required List<InsightComment> comments,
+  }) => _AiWordedReport(this, headline, comments);
+}
+
+// 규칙 계산 결과는 그대로 두고 문장만 AI가 쓴 것으로 바꾼 보고서
+class _AiWordedReport extends InsightReport {
+  _AiWordedReport(
+    InsightReport base,
+    String headline,
+    List<InsightComment> comments,
+  ) : super(
+        range: base.range,
+        periods: base.periods,
+        progress: base.progress,
+        score: base.score,
+        consistencyScore: base.consistencyScore,
+        volumeScore: base.volumeScore,
+        trendScore: base.trendScore,
+        headline: headline,
+        comments: comments,
+      );
+
+  @override
+  bool get writtenByAi => true;
 }
 
 class RunInsights {
@@ -208,7 +239,7 @@ class RunInsights {
         : [
             InsightComment(
               InsightTone.info,
-              '첫 러닝을 마치면 ${range.label} 분석이 시작돼요. 10분만 걸어도 기록이 남아요.',
+              '첫 러닝을 마치면 ${range.label} 분석을 시작할 수 있습니다. 10분만 걸어도 기록이 남습니다.',
             ),
           ];
 
@@ -240,17 +271,17 @@ class RunInsights {
     required double projected,
     required PeriodSummary previous,
   }) {
-    if (!hasAnyRun) return '아직 분석할 기록이 없어요';
-    if (!current.active) return '${range.current}는 아직 출발 전이에요';
+    if (!hasAnyRun) return '아직 분석할 기록이 없습니다.';
+    if (!current.active) return '${range.current}는 아직 기록이 없습니다.';
     if (previous.km > 0 && projected >= previous.km * 1.1) {
-      return '${range.previous}보다 페이스가 좋아요';
+      return '${range.previous}보다 많이 달리는 추세입니다.';
     }
     if (previous.km > 0 && projected < previous.km * 0.7) {
-      return '${range.previous}보다 조금 느슨해졌어요';
+      return '${range.previous}보다 달린 거리가 적은 추세입니다.';
     }
-    if (score >= 75) return '꾸준함이 몸에 붙었어요';
-    if (score >= 55) return '좋은 흐름을 타고 있어요';
-    return '한 걸음씩 쌓이는 중이에요';
+    if (score >= 75) return '꾸준히 달리고 있는 상태입니다.';
+    if (score >= 55) return '안정적인 흐름입니다.';
+    return '기록을 쌓아 가는 단계입니다.';
   }
 
   static List<InsightComment> _comments(
@@ -271,15 +302,15 @@ class RunInsights {
       out.add(
         InsightComment(
           InsightTone.good,
-          '$lookback$unit 연속으로 뛰었어요. 습관이 되는 가장 어려운 구간을 넘었어요.',
+          '지난 $lookback$unit 연속으로 달렸습니다. 습관이 자리 잡는 구간을 지난 것으로 보입니다.',
         ),
       );
     } else if (activePast <= 1) {
       out.add(
         InsightComment(
           InsightTone.warn,
-          '지난 $lookback$unit 중 $activePast번만 뛰었어요. '
-          '${range.isWeek ? "주 2번, 20분" : "주 1번"}부터 다시 시작해 보세요.',
+          '지난 $lookback$unit 중 $activePast번 달렸습니다. '
+          '${range.isWeek ? "주 2번, 20분" : "주 1번"}부터 다시 시작하는 방법이 있습니다.',
         ),
       );
     }
@@ -289,7 +320,7 @@ class RunInsights {
       out.add(
         InsightComment(
           InsightTone.info,
-          '${range.current}는 아직 기록이 없어요. 짧게라도 한 번 뛰면 흐름이 이어져요.',
+          '${range.current}는 아직 기록이 없습니다. 짧게라도 한 번 달리면 흐름을 이어 갈 수 있습니다.',
         ),
       );
     } else if (previous.km > 0) {
@@ -299,23 +330,23 @@ class RunInsights {
         out.add(
           InsightComment(
             InsightTone.warn,
-            '지금 속도면 ${range.previous}보다 $percent% 더 뛰게 돼요. '
-            '갑자기 많이 늘리면 무릎과 발목에 무리가 가요. 한 번은 쉬어가는 날로 두세요.',
+            '지금 속도라면 ${range.previous}보다 $percent% 더 달리는 셈입니다. '
+            '거리를 갑자기 늘리면 무릎과 발목에 부담이 갈 수 있습니다. 하루는 쉬는 날로 두는 것이 좋습니다.',
           ),
         );
       } else if (percent >= 5) {
         out.add(
           InsightComment(
             InsightTone.good,
-            '지금 속도면 ${range.previous}보다 $percent% 많이 뛰어요. 늘리는 폭도 딱 좋아요.',
+            '지금 속도라면 ${range.previous}보다 $percent% 더 달리는 셈입니다. 무리가 없는 증가 폭입니다.',
           ),
         );
       } else if (percent <= -30 && progress > 0.5) {
         out.add(
           InsightComment(
             InsightTone.warn,
-            '${range.previous}의 ${(projected / previous.km * 100).round()}% 정도예요. '
-            '남은 ${range.isWeek ? "며칠" : "기간"} 동안 한 번만 더 뛰어도 따라잡아요.',
+            '${range.previous}의 ${(projected / previous.km * 100).round()}% 수준입니다. '
+            '남은 ${range.isWeek ? "며칠" : "기간"} 동안 한 번 더 달리면 따라잡을 수 있습니다.',
           ),
         );
       }
@@ -330,14 +361,14 @@ class RunInsights {
         out.add(
           InsightComment(
             InsightTone.good,
-            '1km를 ${range.previous}보다 $faster초 빨리 달리고 있어요.',
+            '1km당 ${range.previous}보다 $faster초 빠르게 달리고 있습니다.',
           ),
         );
       } else if (faster <= -15) {
         out.add(
           InsightComment(
             InsightTone.info,
-            '페이스가 1km당 ${-faster}초 느려졌어요. 피곤하다면 천천히 오래 뛰는 것도 좋은 훈련이에요.',
+            '페이스가 1km당 ${-faster}초 느려졌습니다. 피곤하다면 천천히 오래 달리는 것도 좋은 훈련입니다.',
           ),
         );
       }
@@ -349,14 +380,14 @@ class RunInsights {
       out.add(
         const InsightComment(
           InsightTone.info,
-          '한 번에 평균 2km가 안 돼요. 다음엔 5분만 더 뛰어 보세요. 지구력이 가장 빨리 느는 방법이에요.',
+          '한 번에 평균 2km보다 짧게 달렸습니다. 5분만 더 달리면 지구력을 가장 빠르게 늘릴 수 있습니다.',
         ),
       );
     } else if (latest.active && latest.averageKm >= 5) {
       out.add(
         InsightComment(
           InsightTone.good,
-          '한 번에 평균 ${latest.averageKm.toStringAsFixed(1)}km를 뛰어요. 탄탄한 지구력이에요.',
+          '한 번에 평균 ${latest.averageKm.toStringAsFixed(1)}km를 달렸습니다. 지구력이 충분한 편입니다.',
         ),
       );
     }
@@ -367,7 +398,7 @@ class RunInsights {
       out.add(
         InsightComment(
           InsightTone.good,
-          '최근 ${periods.length}$unit 중 ${range.current}가 가장 많이 뛰었어요.',
+          '최근 ${periods.length}$unit 중 ${range.current}에 가장 많이 달렸습니다.',
         ),
       );
     }
@@ -378,14 +409,14 @@ class RunInsights {
         InsightComment(
           InsightTone.info,
           '${range.label} 목표 ${range.targetKm.toStringAsFixed(0)}km까지 '
-          '${(range.targetKm - current.km).toStringAsFixed(1)}km 남았어요.',
+          '${(range.targetKm - current.km).toStringAsFixed(1)}km 남았습니다.',
         ),
       );
     } else {
       out.add(
         InsightComment(
           InsightTone.good,
-          '${range.label} 목표 ${range.targetKm.toStringAsFixed(0)}km를 넘었어요!',
+          '${range.label} 목표 ${range.targetKm.toStringAsFixed(0)}km를 넘었습니다.',
         ),
       );
     }

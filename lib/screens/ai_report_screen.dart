@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../game/run_insights.dart';
 import '../models/run_stats.dart';
+import '../services/ai_coach.dart';
 import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/notched_box.dart';
@@ -12,8 +13,8 @@ import '../utils/formatters.dart';
 // AI 평가 화면
 //
 // 주간 / 월간 탭. 탭마다
-//   점수와 등급 -> 점수 내역(꾸준함·운동량·흐름) -> 이번과 지난번 비교
-//   -> 최근 6주(6달) 거리 막대 -> 조언
+//   AI 비서의 말풍선(한 줄 평 + 조언) -> 점수와 점수 내역(꾸준함·운동량·흐름)
+//   -> 이번과 지난번 비교 -> 최근 6주(6달) 거리 막대
 // 계산은 game/run_insights.dart가 합니다. 이 화면은 그리기만 합니다.
 // ============================================================
 class AiReportScreen extends StatelessWidget {
@@ -62,6 +63,9 @@ class AiReportScreen extends StatelessWidget {
 }
 
 // 홈 카드와 화면이 같은 계산을 쓰도록 스트림을 만드는 곳을 하나로 둡니다.
+//
+// 먼저 규칙 문장으로 된 보고서를 바로 내보내고, AI 비서의 문장이 도착하면
+// 문장만 바꾼 보고서를 한 번 더 내보냅니다. 그래서 기다리는 동안 화면이 비지 않습니다.
 Stream<InsightReport> watchInsight(String userId, InsightRange range) {
   final DateTime now = DateTime.now();
   return UserRepository.instance
@@ -72,7 +76,20 @@ Stream<InsightReport> watchInsight(String userId, InsightRange range) {
           statsByKey: stats,
           now: DateTime.now(),
         ),
-      );
+      )
+      .asyncExpand((report) async* {
+        yield report;
+        final AiWords? words = await AiCoach.instance.wordsFor(userId, report);
+        if (words != null) {
+          yield report.withWords(
+            headline: words.headline,
+            comments: words.comments,
+          );
+        } else if (report.hasAnyRun) {
+          // 실패했으면 같은 보고서를 한 번 더 보내서, 화면이 실패 이유를 그리게 합니다.
+          yield report;
+        }
+      });
 }
 
 class _InsightTab extends StatefulWidget {
@@ -103,7 +120,7 @@ class _InsightTabState extends State<_InsightTab>
       stream: _report,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return const Center(child: Text('기록을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.'));
+          return const Center(child: Text('기록을 불러오지 못했습니다. 인터넷 연결을 확인해 주십시오.'));
         }
         final InsightReport? report = snapshot.data;
         if (report == null) {
@@ -112,18 +129,18 @@ class _InsightTabState extends State<_InsightTab>
         return ListView(
           padding: const EdgeInsets.all(AppSpacing.lg),
           children: [
+            // AI 평가는 맨 위. 비서가 말하듯 말풍선으로 보여줍니다.
+            AiAdvisorSection(report: report),
+            const SizedBox(height: AppSpacing.xl),
             _ScoreCard(report: report),
             const SizedBox(height: AppSpacing.lg),
             _CompareRow(report: report),
             const SizedBox(height: AppSpacing.xl),
             _DistanceBars(report: report),
             const SizedBox(height: AppSpacing.xl),
-            Text('조언', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: AppSpacing.md),
-            for (final comment in report.comments) _CommentTile(comment),
-            const SizedBox(height: AppSpacing.lg),
             Text(
-              '기록은 폰 안에서만 분석해요. 밖으로 보내지 않아요.',
+              '점수는 폰에서 계산합니다. 문장은 AI 비서(Gemini)가 숫자만 받아 작성하며, '
+              '경로와 이름은 보내지 않습니다.',
               style: Theme.of(context).textTheme.labelMedium,
               textAlign: TextAlign.center,
             ),
@@ -171,15 +188,6 @@ class _ScoreCard extends StatelessWidget {
                 ),
                 TextSpan(text: '  / 100', style: small),
               ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            report.headline,
-            style: AppTheme.serifNumber.copyWith(
-              fontSize: 19,
-              color: AppColors.white,
-              height: 1.3,
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
@@ -436,35 +444,162 @@ class _DistanceBars extends StatelessWidget {
   }
 }
 
-class _CommentTile extends StatelessWidget {
-  final InsightComment comment;
+// AI 비서 영역: 왼쪽에 "AI" 표시, 오른쪽에 말풍선이 차례로 쌓입니다.
+//   첫 말풍선(검정) - 한 줄 평
+//   다음 말풍선(크림) - 조언. 앞에 작은 표시로 잘한 점 / 주의 / 참고를 나눕니다.
+class AiAdvisorSection extends StatelessWidget {
+  final InsightReport report;
 
-  const _CommentTile(this.comment);
+  const AiAdvisorSection({super.key, required this.report});
 
   @override
   Widget build(BuildContext context) {
-    final (IconData icon, Color color) = switch (comment.tone) {
-      InsightTone.good => (Icons.trending_up, AppColors.accent),
-      InsightTone.warn => (Icons.error_outline, AppColors.error),
-      InsightTone.info => (Icons.lightbulb_outline, AppColors.mute),
-    };
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: color),
-          const SizedBox(width: AppSpacing.sm + 2),
-          Expanded(
-            child: Text(
-              comment.text,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(height: 1.45),
+    final TextTheme textTheme = Theme.of(context).textTheme;
+    final String? error = AiCoach.instance.lastError;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text('AI 평가', style: textTheme.titleLarge),
+            const Spacer(),
+            Text(
+              report.writtenByAi ? 'AI 비서 작성' : '기본 분석',
+              style: textTheme.labelMedium,
             ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _AdvisorBadge(),
+            const SizedBox(width: AppSpacing.sm + 2),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _Bubble(
+                    dark: true,
+                    child: Text(
+                      report.headline,
+                      style: AppTheme.serifNumber.copyWith(
+                        fontSize: 16,
+                        height: 1.4,
+                        color: AppColors.white,
+                      ),
+                    ),
+                  ),
+                  for (final comment in report.comments)
+                    _Bubble(child: _CommentLine(comment)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        // AI 문장을 못 받았으면 이유를 작게 보여줍니다. (원인을 폰에서 바로 확인)
+        if (!report.writtenByAi && report.hasAnyRun && error != null) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'AI 연결 실패: $error',
+            style: textTheme.labelMedium?.copyWith(color: AppColors.error),
           ),
         ],
+      ],
+    );
+  }
+}
+
+// 말풍선 왼쪽의 "AI" 표시
+class _AdvisorBadge extends StatelessWidget {
+  const _AdvisorBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 36,
+      height: 36,
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        color: AppColors.black,
+        shape: BoxShape.circle,
       ),
+      child: Text(
+        'AI',
+        style: AppTheme.sans.copyWith(
+          fontSize: 12,
+          fontWeight: AppTheme.sansMedium,
+          color: AppColors.sandOnDark,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+}
+
+// 말풍선. 왼쪽 위 모서리만 덜 둥글게 해서 "AI" 쪽에서 나온 말처럼 보이게 합니다.
+class _Bubble extends StatelessWidget {
+  final Widget child;
+  final bool dark;
+
+  const _Bubble({required this.child, this.dark = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md - 2,
+          vertical: AppSpacing.sm + 3,
+        ),
+        decoration: BoxDecoration(
+          color: dark ? AppColors.black : AppColors.cream,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(4),
+            topRight: Radius.circular(AppRadius.md),
+            bottomLeft: Radius.circular(AppRadius.md),
+            bottomRight: Radius.circular(AppRadius.md),
+          ),
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+// 조언 한 줄: 앞에 작은 표시(잘한 점 / 주의 / 참고) + 문장
+class _CommentLine extends StatelessWidget {
+  final InsightComment comment;
+
+  const _CommentLine(this.comment);
+
+  @override
+  Widget build(BuildContext context) {
+    final (String label, Color color) = switch (comment.tone) {
+      InsightTone.good => ('잘한 점', AppColors.accent),
+      InsightTone.warn => ('주의', AppColors.error),
+      InsightTone.info => ('참고', AppColors.label),
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: AppTheme.sans.copyWith(
+            fontSize: 11,
+            fontWeight: AppTheme.sansMedium,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          comment.text,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5),
+        ),
+      ],
     );
   }
 }

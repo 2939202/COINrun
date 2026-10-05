@@ -35,6 +35,7 @@ dependencies:
   permission_handler: ^12.0.1
   flutter_compass: ^0.8.1
   vibration: ^3.2.1
+  firebase_ai: ^4.0.0
 
 dev_dependencies:
   flutter_test:

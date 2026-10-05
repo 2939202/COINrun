@@ -643,13 +643,14 @@ class RankingCard extends StatefulWidget {
   State<RankingCard> createState() => RankingCardState();
 }
 
-// 랭킹 카드는 교환 버튼과 같은 금속 금색입니다. 글자는 금에 새긴 것처럼 짙은 갈색.
+// 랭킹 카드는 교환 버튼과 같은 금속 금색입니다. 갈색 글자는 금색에 묻혀서
+// 글자는 또렷한 먹색으로 씁니다.
 class RankingCardState extends State<RankingCard> {
   late final Stream<List<RankingEntry>> _top = RankingRepository.instance
       .watchTop(RankingKind.distance, limit: 1);
 
-  static const Color _ink = GoldColors.engraved;
-  static const Color _inkSoft = Color(0xFF7A5612);
+  static const Color _ink = AppColors.black;
+  static const Color _inkSoft = Color(0xFF2E2620);
 
   @override
   Widget build(BuildContext context) {
