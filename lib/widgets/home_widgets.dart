@@ -12,6 +12,7 @@ import '../utils/formatters.dart';
 import 'gold_coin.dart';
 import 'notched_box.dart';
 import 'segment_bar.dart';
+import 'run_app_bar.dart' show GoldColors;
 import 'runner_figure.dart';
 
 // ============================================================
@@ -642,9 +643,13 @@ class RankingCard extends StatefulWidget {
   State<RankingCard> createState() => RankingCardState();
 }
 
+// 랭킹 카드는 교환 버튼과 같은 금속 금색입니다. 글자는 금에 새긴 것처럼 짙은 갈색.
 class RankingCardState extends State<RankingCard> {
   late final Stream<List<RankingEntry>> _top = RankingRepository.instance
       .watchTop(RankingKind.distance, limit: 1);
+
+  static const Color _ink = GoldColors.engraved;
+  static const Color _inkSoft = Color(0xFF7A5612);
 
   @override
   Widget build(BuildContext context) {
@@ -654,17 +659,21 @@ class RankingCardState extends State<RankingCard> {
       onTap: widget.onTap,
       child: Container(
         padding: const EdgeInsets.all(AppSpacing.md - 2),
-        decoration: _shortcutDecoration(AppColors.white),
+        decoration: BoxDecoration(
+          gradient: GoldColors.metal,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: GoldColors.edge, width: 1.4),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('RANKING', style: _shortcutCaption),
+            Text('RANKING', style: _shortcutCaption.copyWith(color: _inkSoft)),
             const SizedBox(height: AppSpacing.xs + 2),
-            Text('랭킹', style: _shortcutTitle),
+            Text('랭킹', style: _shortcutTitle.copyWith(color: _ink)),
             const SizedBox(height: AppSpacing.xs),
-            Text('전체 순위 보기', style: _shortcutSub),
+            Text('전체 순위 보기', style: _shortcutSub.copyWith(color: _inkSoft)),
             const Spacer(),
-            Container(height: 1, color: AppColors.sand),
+            Container(height: 1, color: _ink.withValues(alpha: 0.35)),
             const SizedBox(height: AppSpacing.xs + 2),
 
             // 1등만 살짝 보여줍니다.
@@ -675,9 +684,7 @@ class RankingCardState extends State<RankingCard> {
                 if (top.isEmpty) {
                   return Text(
                     '아직 아무도 없어요',
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: AppColors.mute,
-                    ),
+                    style: textTheme.bodyMedium?.copyWith(color: _inkSoft),
                   );
                 }
                 final RankingEntry first = top.first;
@@ -688,29 +695,41 @@ class RankingCardState extends State<RankingCard> {
                       height: 26,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: AppColors.cream,
+                        color: const Color(0xFFFFF6D5),
                         shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.accent, width: 1.5),
+                        border: Border.all(color: GoldColors.edge, width: 1.5),
                       ),
                       child: Text(
                         '1',
-                        style: AppTheme.number.copyWith(fontSize: 13),
+                        style: AppTheme.number.copyWith(
+                          fontSize: 13,
+                          color: _ink,
+                        ),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Text(
                         first.nickname,
-                        style: textTheme.titleMedium?.copyWith(fontSize: 14),
+                        style: textTheme.titleMedium?.copyWith(
+                          fontSize: 14,
+                          color: _ink,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     Text(
                       formatKm(first.totalDistance),
-                      style: AppTheme.number.copyWith(fontSize: 15),
+                      style: AppTheme.number.copyWith(
+                        fontSize: 15,
+                        color: _ink,
+                      ),
                     ),
-                    Text(' km', style: textTheme.labelMedium),
+                    Text(
+                      ' km',
+                      style: textTheme.labelMedium?.copyWith(color: _inkSoft),
+                    ),
                   ],
                 );
               },
