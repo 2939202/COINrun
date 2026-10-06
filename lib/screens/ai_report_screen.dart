@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../game/run_calendar.dart';
 import '../game/run_insights.dart';
+import '../models/run_log.dart';
 import '../models/run_stats.dart';
 import '../services/ai_coach.dart';
 import '../services/user_repository.dart';
@@ -13,7 +15,7 @@ import '../utils/formatters.dart';
 // AI 평가 화면
 //
 // 주간 / 월간 탭. 탭마다
-//   AI 비서의 말풍선(한 줄 평 + 조언) -> 점수와 점수 내역(꾸준함·운동량·흐름)
+//   검은 카드(점수, 점수 내역, 이번 달 달력) -> AI 비서의 말풍선(한 줄 평 + 조언)
 //   -> 이번과 지난번 비교 -> 최근 6주(6달) 거리 막대
 // 계산은 game/run_insights.dart가 합니다. 이 화면은 그리기만 합니다.
 // ============================================================
@@ -109,6 +111,12 @@ class _InsightTabState extends State<_InsightTab>
     widget.range,
   );
 
+  // 달력에 그릴 이번 달 기록 (앞뒤 주의 칸까지)
+  late final Stream<List<RunLog>> _monthRuns = () {
+    final (DateTime start, DateTime end) = RunCalendar.rangeOf(DateTime.now());
+    return UserRepository.instance.watchRunsBetween(widget.userId, start, end);
+  }();
+
   // 탭을 오갈 때마다 다시 읽지 않게 붙잡아 둡니다.
   @override
   bool get wantKeepAlive => true;
@@ -129,11 +137,18 @@ class _InsightTabState extends State<_InsightTab>
         return ListView(
           padding: const EdgeInsets.all(AppSpacing.lg),
           children: [
-            // AI 평가는 맨 위. 비서가 말하듯 말풍선으로 보여줍니다.
+            // 검은 카드가 맨 위. 달력은 기록이 오기 전에도 빈 칸으로 먼저 그립니다.
+            StreamBuilder<List<RunLog>>(
+              stream: _monthRuns,
+              builder: (context, runs) => InsightScoreCard(
+                report: report,
+                calendar: RunCalendar.of(DateTime.now(), runs.data ?? const []),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            // 그 아래 AI 비서의 말풍선
             AiAdvisorSection(report: report),
             const SizedBox(height: AppSpacing.xl),
-            _ScoreCard(report: report),
-            const SizedBox(height: AppSpacing.lg),
             _CompareRow(report: report),
             const SizedBox(height: AppSpacing.xl),
             _DistanceBars(report: report),
@@ -152,10 +167,15 @@ class _InsightTabState extends State<_InsightTab>
 }
 
 // 검은 점수 카드: 등급 글자 + 점수 + 한 줄 평 + 점수 내역
-class _ScoreCard extends StatelessWidget {
+class InsightScoreCard extends StatelessWidget {
   final InsightReport report;
+  final RunCalendar calendar;
 
-  const _ScoreCard({required this.report});
+  const InsightScoreCard({
+    super.key,
+    required this.report,
+    required this.calendar,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -196,6 +216,8 @@ class _ScoreCard extends StatelessWidget {
           _part('운동량', report.volumeScore, 30, small),
           const SizedBox(height: AppSpacing.sm + 2),
           _part('흐름', report.trendScore, 30, small),
+          const SizedBox(height: AppSpacing.lg),
+          _FoldableCalendar(calendar: calendar, weekOnly: report.range.isWeek),
         ],
       ),
     );
@@ -439,6 +461,225 @@ class _DistanceBars extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         ],
+      ),
+    );
+  }
+}
+
+// 달력 접기/펴기. 처음에는 접혀 있어서 점수만 한눈에 보입니다.
+// 탭을 오가도 펼친 상태가 남습니다. (탭이 살아 있는 동안)
+class _FoldableCalendar extends StatefulWidget {
+  final RunCalendar calendar;
+  final bool weekOnly;
+
+  const _FoldableCalendar({required this.calendar, required this.weekOnly});
+
+  @override
+  State<_FoldableCalendar> createState() => _FoldableCalendarState();
+}
+
+class _FoldableCalendarState extends State<_FoldableCalendar> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final DateTime today = widget.calendar.today;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 누르는 줄. 높이를 넉넉히 둬서 손가락으로 누르기 쉽게 합니다.
+        InkWell(
+          onTap: () => setState(() => _open = !_open),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            child: Row(
+              children: [
+                Text(
+                  '${today.year}.${today.month.toString().padLeft(2, '0')} 달력',
+                  style: AppTheme.caption.copyWith(color: AppColors.sandOnDark),
+                ),
+                const Spacer(),
+                AnimatedRotation(
+                  turns: _open ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: const Icon(
+                    Icons.expand_more,
+                    size: 20,
+                    color: AppColors.sandOnDark,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+          alignment: Alignment.topCenter,
+          child: _open
+              ? Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.xs),
+                  child: _CalendarGrid(
+                    calendar: widget.calendar,
+                    weekOnly: widget.weekOnly,
+                  ),
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+      ],
+    );
+  }
+}
+
+// 검은 카드 안의 이번 달 달력. 칸마다 그날 달린 거리를 숫자와 게이지로 보여줍니다.
+// 이번 기간(주간 탭은 이번 주, 월간 탭은 이번 달)은 흰 바탕으로 밝게 칠합니다.
+class _CalendarGrid extends StatelessWidget {
+  final RunCalendar calendar;
+  final bool weekOnly;
+
+  const _CalendarGrid({required this.calendar, required this.weekOnly});
+
+  static const List<String> _weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+
+  @override
+  Widget build(BuildContext context) {
+    final DateTime today = calendar.today;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            for (final name in _weekdays)
+              Expanded(
+                child: Text(
+                  name,
+                  textAlign: TextAlign.center,
+                  style: AppTheme.sans.copyWith(
+                    fontSize: 10,
+                    color: AppColors.sandOnDark.withValues(alpha: 0.7),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        for (final row in calendar.rows)
+          Row(
+            children: [
+              for (final day in row)
+                Expanded(
+                  child: _DayCell(
+                    day: day,
+                    km: calendar.kmOn(day),
+                    fullKm: calendar.gaugeFullKm,
+                    bright: weekOnly
+                        ? calendar.isThisWeek(day)
+                        : calendar.isThisMonth(day),
+                    otherMonth: !calendar.isThisMonth(day),
+                    future: calendar.isFuture(day),
+                    today: day == today,
+                  ),
+                ),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+// 달력 한 칸: 왼쪽 위 날짜, 가운데 km, 아래 게이지
+class _DayCell extends StatelessWidget {
+  final DateTime day;
+  final double km;
+  final double fullKm;
+  final bool bright; // 이번 기간 - 흰 바탕
+  final bool otherMonth; // 앞뒤 달의 날짜 - 흐리게
+  final bool future; // 아직 오지 않은 날 - 숫자와 게이지 없음
+  final bool today;
+
+  const _DayCell({
+    required this.day,
+    required this.km,
+    required this.fullKm,
+    required this.bright,
+    required this.otherMonth,
+    required this.future,
+    required this.today,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Color ink = bright ? AppColors.black : AppColors.sandOnDark;
+    final Color fill = bright ? AppColors.accent : AppColors.accentOnDark;
+    final Color track = bright ? AppColors.sand : AppColors.trackOnDark;
+    final bool ran = km > 0 && !future;
+
+    return Opacity(
+      opacity: otherMonth && !bright ? 0.35 : 1,
+      child: Container(
+        height: 46,
+        margin: const EdgeInsets.all(1.5),
+        padding: const EdgeInsets.fromLTRB(4, 3, 4, 4),
+        decoration: BoxDecoration(
+          color: bright ? AppColors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(5),
+          // 오늘: 흰 칸에서는 검은 테두리, 검은 칸에서는 금빛 테두리
+          border: today
+              ? Border.all(
+                  color: bright ? AppColors.black : AppColors.accentOnDark,
+                  width: 1.6,
+                )
+              : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${day.day}',
+              style: AppTheme.sans.copyWith(
+                fontSize: 9,
+                height: 1.1,
+                color: ink.withValues(alpha: future ? 0.5 : 0.8),
+              ),
+            ),
+            Expanded(
+              child: Center(
+                child: ran
+                    ? FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          km.toStringAsFixed(1),
+                          style: AppTheme.number.copyWith(
+                            fontSize: 12,
+                            color: ink,
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
+            // 그날 거리 게이지. 이 달 가장 많이 뛴 날이 가득입니다.
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: SizedBox(
+                height: 3,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ColoredBox(color: future ? Colors.transparent : track),
+                    if (ran)
+                      FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: (km / fullKm).clamp(0.08, 1.0),
+                        child: ColoredBox(color: fill),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

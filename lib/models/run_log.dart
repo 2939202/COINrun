@@ -12,6 +12,10 @@ class RunLog {
   final int durationSeconds;
   final int movingSeconds;
   final int steps;
+
+  // 걸음 센서 없이 거리로 추정한 걸음 수인지. 추정값이면 케이던스(분당 걸음)를 믿을 수 없어서
+  // 걷기/달리기 구분에 쓰지 않습니다. (game/training_model.dart)
+  final bool stepsEstimated;
   final int goldEarned;
   final int expEarned;
 
@@ -33,6 +37,7 @@ class RunLog {
     required this.durationSeconds,
     required this.movingSeconds,
     required this.steps,
+    this.stepsEstimated = false,
     required this.goldEarned,
     required this.expEarned,
     required this.hidden,
@@ -50,6 +55,7 @@ class RunLog {
       durationSeconds: (map['durationSeconds'] as num?)?.toInt() ?? 0,
       movingSeconds: (map['movingSeconds'] as num?)?.toInt() ?? 0,
       steps: (map['steps'] as num?)?.toInt() ?? 0,
+      stepsEstimated: map['stepsEstimated'] as bool? ?? false,
       goldEarned: (map['goldEarned'] as num?)?.toInt() ?? 0,
       expEarned: (map['expEarned'] as num?)?.toInt() ?? 0,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate(),

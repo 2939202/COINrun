@@ -136,6 +136,25 @@ class UserRepository {
         );
   }
 
+  // start 이상 end 미만에 저장된 기록 (AI 평가의 달력). 감춘 기록은 뺍니다.
+  Stream<List<RunLog>> watchRunsBetween(
+    String userId,
+    DateTime start,
+    DateTime end,
+  ) {
+    return _userDoc(userId)
+        .collection('runs')
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('createdAt', isLessThan: Timestamp.fromDate(end))
+        .snapshots()
+        .map(
+          (query) => query.docs
+              .map((doc) => RunLog.fromMap(doc.id, doc.data()))
+              .where((log) => !log.hidden && !log.isInTrash)
+              .toList(),
+        );
+  }
+
   // 로그인 직후에 부릅니다. 문서가 없을 때만 새로 만들고, 이미 있으면 아무것도 하지 않습니다.
   // (이미 있는데 set()으로 덮어쓰면 모아둔 골드와 레벨이 날아갑니다)
   Future<void> ensureUser(
