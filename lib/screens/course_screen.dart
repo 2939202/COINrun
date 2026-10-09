@@ -107,6 +107,14 @@ class _CourseScreenState extends State<CourseScreen> {
   }
 
   // 러닝으로 돌아가면 홈의 "시작"도 다시 러닝으로 갑니다.
+  // 사설 코스 만들기: 자유 러닝과 같은 화면에서 한 번 달리면 그 길이 코스가 됩니다.
+  void _create() {
+    Navigator.pushReplacement(
+      context,
+      slideFromRight(RunScreen(userId: widget.userId, creatingCourse: true)),
+    );
+  }
+
   void _swap() {
     UserRepository.instance.setPrefersCourseRun(widget.userId, false);
     Navigator.pushReplacement(
@@ -123,6 +131,7 @@ class _CourseScreenState extends State<CourseScreen> {
           district: _district,
           official: official,
           selectedId: widget.selectedId,
+          userId: widget.userId,
         ),
       ),
     );
@@ -265,6 +274,7 @@ class _CourseScreenState extends State<CourseScreen> {
         caption: 'PRIVATE',
         title: '사설 코스',
         onSeeAll: () => _seeAll(official: false),
+        onCreate: _create,
       ),
       const SizedBox(height: AppSpacing.md),
       StreamBuilder<List<Course>>(
@@ -281,6 +291,7 @@ class _CourseScreenState extends State<CourseScreen> {
             courses: courses,
             selectedId: widget.selectedId,
             onTap: _choose,
+            userId: widget.userId,
           );
         },
       ),
@@ -337,12 +348,14 @@ class CourseListScreen extends StatefulWidget {
   final String district;
   final bool official;
   final String? selectedId;
+  final String? userId; // 사설 코스 하트를 누를 수 있게
 
   const CourseListScreen({
     super.key,
     required this.district,
     required this.official,
     this.selectedId,
+    this.userId,
   });
 
   @override
@@ -394,6 +407,7 @@ class _CourseListScreenState extends State<CourseListScreen> {
       courses: courses,
       selectedId: widget.selectedId,
       onTap: _choose,
+      userId: widget.userId,
     );
   }
 }

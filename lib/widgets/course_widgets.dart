@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
 import '../models/course.dart';
+import '../services/course_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 
@@ -22,11 +23,15 @@ class CourseGrid extends StatelessWidget {
   final String? selectedId;
   final ValueChanged<Course> onTap;
 
+  // 이걸 주면 사설 코스 카드의 하트를 누를 수 있습니다.
+  final String? userId;
+
   const CourseGrid({
     super.key,
     required this.courses,
     required this.onTap,
     this.selectedId,
+    this.userId,
   });
 
   @override
@@ -44,6 +49,7 @@ class CourseGrid extends StatelessWidget {
             course: course,
             selected: course.id == selectedId,
             onTap: () => onTap(course),
+            userId: userId,
           ),
       ],
     );
@@ -56,12 +62,14 @@ class CourseCard extends StatelessWidget {
   final Course course;
   final bool selected;
   final VoidCallback onTap;
+  final String? userId;
 
   const CourseCard({
     super.key,
     required this.course,
     required this.onTap,
     this.selected = false,
+    this.userId,
   });
 
   @override
@@ -114,12 +122,7 @@ class CourseCard extends StatelessWidget {
                 ),
                 if (!course.official) ...[
                   const Spacer(),
-                  Icon(Icons.favorite, size: 11, color: sub),
-                  const SizedBox(width: 2),
-                  Text(
-                    '${course.hearts}',
-                    style: AppTheme.sans.copyWith(fontSize: 11, color: sub),
-                  ),
+                  _HeartButton(course: course, userId: userId, color: sub),
                 ],
               ],
             ),
@@ -219,11 +222,15 @@ class CourseSectionHead extends StatelessWidget {
   final String title;
   final VoidCallback? onSeeAll;
 
+  // 사설 코스의 "만들기"
+  final VoidCallback? onCreate;
+
   const CourseSectionHead({
     super.key,
     required this.caption,
     required this.title,
     this.onSeeAll,
+    this.onCreate,
   });
 
   @override
@@ -253,6 +260,10 @@ class CourseSectionHead extends StatelessWidget {
           ],
         ),
         const Spacer(),
+        if (onCreate != null) ...[
+          _CreateButton(onTap: onCreate!),
+          const SizedBox(width: AppSpacing.md),
+        ],
         if (onSeeAll != null)
           GestureDetector(
             onTap: onSeeAll,
@@ -268,6 +279,101 @@ class CourseSectionHead extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+// 사설 코스 "만들기". 검은 바탕의 작은 알약 버튼
+class _CreateButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _CreateButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.black,
+      borderRadius: BorderRadius.circular(AppRadius.pill),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.sm + 4,
+            vertical: AppSpacing.xs + 1,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.add, size: 14, color: AppColors.white),
+              const SizedBox(width: 2),
+              Text(
+                '만들기',
+                style: AppTheme.sans.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// 사설 코스 카드의 하트. 누르면 켜고 끕니다. 자기 코스이거나 userId가 없으면 숫자만.
+class _HeartButton extends StatelessWidget {
+  final Course course;
+  final String? userId;
+  final Color color;
+
+  const _HeartButton({
+    required this.course,
+    required this.userId,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final String? uid = userId;
+    final TextStyle style = AppTheme.sans.copyWith(fontSize: 11, color: color);
+    if (uid == null || course.authorId == uid || course.id.isEmpty) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.favorite, size: 11, color: color),
+          const SizedBox(width: 2),
+          Text('${course.hearts}', style: style),
+        ],
+      );
+    }
+    return StreamBuilder<bool>(
+      stream: CourseRepository.instance.watchHearted(course.id, uid),
+      builder: (context, snapshot) {
+        final bool on = snapshot.data ?? false;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => CourseRepository.instance.toggleHeart(course.id, uid),
+          // 손가락으로 누르기 쉽게 둘레를 넉넉히 잡습니다.
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(6, 4, 0, 0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  on ? Icons.favorite : Icons.favorite_border,
+                  size: 13,
+                  color: on ? AppColors.error : color,
+                ),
+                const SizedBox(width: 2),
+                Text('${course.hearts}', style: style),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

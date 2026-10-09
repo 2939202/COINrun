@@ -45,13 +45,26 @@ service cloud.firestore {
     //   읽기: 로그인한 사람은 누구나 (남이 만든 코스를 달려야 하므로)
     //   만들기: 자기 이름(authorId)으로만
     //   고치기/지우기: 만든 사람만
-    //   하트 수는 아직 앱에서 올리지 않습니다. 하트 기능을 붙일 때 규칙을 다시 봅니다.
+    //   하트: 남의 코스에 한해, 하트 수(hearts)만 1씩 올리거나 내릴 수 있습니다.
     match /courses/{courseId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null
-        && request.resource.data.authorId == request.auth.uid;
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.hearts == 0;
       allow update, delete: if request.auth != null
         && resource.data.authorId == request.auth.uid;
+      allow update: if request.auth != null
+        && resource.data.authorId != request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hearts'])
+        && (request.resource.data.hearts == resource.data.hearts + 1
+            || request.resource.data.hearts == resource.data.hearts - 1);
+
+      // 누가 하트를 눌렀는지. 자기 줄만 만들고 지울 수 있습니다.
+      match /hearts/{userId} {
+        allow read: if request.auth != null;
+        allow create, delete: if request.auth != null
+          && request.auth.uid == userId;
+      }
     }
 
     // 위에서 허용하지 않은 모든 접근은 막습니다.

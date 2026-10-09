@@ -82,4 +82,36 @@ void main() {
     expect(course.points.length, 2);
     expect(course.distanceMeters, closeTo(111, 2));
   });
+
+  group('사설 코스 만들기', () {
+    test('끊긴 토막도 한 줄로 이어 코스로 만든다', () {
+      final path = Course.pathFromSegments(const [
+        [LatLng(37.65, 127.06), LatLng(37.651, 127.06)],
+        [LatLng(37.652, 127.06), LatLng(37.653, 127.06)],
+      ]);
+      expect(path.length, 4);
+      expect(path.first, const LatLng(37.65, 127.06));
+      expect(path.last, const LatLng(37.653, 127.06));
+    });
+
+    test('저장한 모양 그대로 다시 읽힌다 (만든 사람, 하트 0)', () {
+      const course = Course(
+        id: '',
+        name: '아침 당현천',
+        district: '노원구',
+        points: [LatLng(37.65, 127.06), LatLng(37.651, 127.061)],
+        authorName: '달리는곰',
+        authorId: 'uid-1',
+      );
+      final map = course.toUserCourseMap();
+      expect(map['hearts'], 0);
+      expect(map['authorId'], 'uid-1');
+      final back = Course.fromMap('c1', map);
+      expect(back.name, '아침 당현천');
+      expect(back.district, '노원구');
+      expect(back.authorId, 'uid-1');
+      expect(back.points, course.points);
+      expect(back.official, isFalse);
+    });
+  });
 }

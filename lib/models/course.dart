@@ -18,6 +18,7 @@ class Course {
   final bool official;
   final int hearts; // 사설 코스만 씁니다
   final String? authorName; // 사설 코스를 만든 사람
+  final String? authorId; // 만든 사람의 uid. 자기 코스에는 하트를 못 누릅니다.
 
   const Course({
     required this.id,
@@ -27,7 +28,28 @@ class Course {
     this.official = false,
     this.hearts = 0,
     this.authorName,
+    this.authorId,
   });
+
+  // 사설 코스로 저장할 수 있는 최소 거리
+  static const double minUserCourseKm = 0.5;
+
+  // 달린 기록(토막 여럿) -> 코스 한 줄. 토막 사이 끊긴 구간은 그냥 이어 붙입니다.
+  // 코스는 한 줄로 따라가는 길이라, 신호가 잠깐 끊겼어도 이어서 보는 편이 자연스럽습니다.
+  static List<LatLng> pathFromSegments(List<List<LatLng>> segments) => [
+    for (final segment in segments) ...segment,
+  ];
+
+  Map<String, dynamic> toUserCourseMap() => {
+    'name': name,
+    'district': district,
+    'points': [
+      for (final p in points) {'lat': p.latitude, 'lng': p.longitude},
+    ],
+    'hearts': hearts,
+    'authorName': authorName,
+    'authorId': authorId,
+  };
 
   static const Distance _distance = Distance();
 
@@ -57,6 +79,7 @@ class Course {
       ],
       hearts: (map['hearts'] as num?)?.toInt() ?? 0,
       authorName: map['authorName'] as String?,
+      authorId: map['authorId'] as String?,
     );
   }
 }

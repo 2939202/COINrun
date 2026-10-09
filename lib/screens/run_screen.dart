@@ -17,7 +17,9 @@ import '../models/equipment_set.dart';
 import '../models/run_record.dart';
 import '../models/user_model.dart';
 import '../services/app_permissions.dart';
+import '../services/course_repository.dart';
 import '../services/location_service.dart';
+import '../services/seoul_districts.dart';
 import '../services/step_service.dart';
 import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
@@ -37,6 +39,8 @@ import 'run_report.dart';
 //   - 완료를 누르면 UserRepository가 보상을 계산해 Firestore에 저장하고,
 //     완료 리포트를 보여줍니다.
 //   - 코스 러닝은 걸음 대신 코스 위 코인으로 골드를 줍니다. (game/course_coins.dart)
+//   - "코스 만들기"로 열면 자유 러닝과 똑같이 달리고, 완료하면 그 길을 사설 코스로
+//     올릴지 묻습니다. 기록과 보상은 평소대로 저장됩니다.
 //   - 이 화면은 두 얼굴을 가집니다. 코스 없이 열면 "러닝", 코스를 들고 열면
 //     "코스 러닝"입니다. 앱바의 ⇄로 러닝 <-> 코스 러닝(코스 고르기)을 오가고,
 //     ←는 언제나 홈으로 나갑니다. 오가는 화면은 쌓지 않고 바꿔 끼웁니다.
@@ -60,7 +64,15 @@ class RunScreen extends StatefulWidget {
   // 코스 러닝이면 그 코스. null이면 자유 러닝
   final Course? course;
 
-  const RunScreen({super.key, required this.userId, this.course});
+  // 사설 코스 만들기. 자유 러닝처럼 달리고, 끝나면 그 길을 코스로 올립니다.
+  final bool creatingCourse;
+
+  const RunScreen({
+    super.key,
+    required this.userId,
+    this.course,
+    this.creatingCourse = false,
+  });
 
   @override
   State<RunScreen> createState() => _RunScreenState();
@@ -412,12 +424,54 @@ class _RunScreenState extends State<RunScreen> {
       });
       // 다 달렸으니 알림을 내립니다.
       _startGps(withForegroundService: false);
-      showRunReport(context, record, reward);
+      await showRunReport(context, record, reward);
+      if (widget.creatingCourse && mounted) await _offerToSaveCourse(record);
     } catch (e) {
       // 저장에 실패하면 기록을 그대로 두고 일시정지 상태로 두어 다시 시도할 수 있게 합니다.
       if (!mounted) return;
       setState(() => _isSaving = false);
       _showMessage('기록 저장에 실패했어요. 인터넷 연결을 확인하고 다시 완료를 눌러주세요.');
+    }
+  }
+
+  // 방금 달린 길을 사설 코스로 올릴지 묻고, 이름을 받아 저장합니다.
+  Future<void> _offerToSaveCourse(RunRecord record) async {
+    final List<LatLng> path = Course.pathFromSegments(record.segments);
+    if (record.distanceKm < Course.minUserCourseKm || path.length < 2) {
+      _showMessage('${Course.minUserCourseKm}km 이상 달려야 코스로 만들 수 있어요.');
+      return;
+    }
+    final String? district = (await SeoulDistricts.load()).districtAt(
+      path.first,
+    );
+    if (!mounted) return;
+    if (district == null) {
+      _showMessage('서울 안에서 출발한 길만 코스로 만들 수 있어요.');
+      return;
+    }
+
+    final String? name = await showDialog<String>(
+      context: context,
+      builder: (context) =>
+          _CourseNameDialog(district: district, km: record.distanceKm),
+    );
+    if (name == null || !mounted) return;
+
+    try {
+      final UserModel? me = await UserRepository.instance
+          .watchUser(widget.userId)
+          .first;
+      await CourseRepository.instance.createUserCourse(
+        userId: widget.userId,
+        authorName: me?.nickname ?? '이름없음',
+        name: name,
+        district: district,
+        segments: record.segments,
+      );
+      _showMessage('$district 사설 코스 "$name"을(를) 만들었어요.');
+    } catch (error) {
+      debugPrint('코스 만들기 실패: $error');
+      _showMessage('코스를 저장하지 못했어요. 인터넷 연결을 확인해 주세요.');
     }
   }
 
@@ -626,7 +680,9 @@ class _RunScreenState extends State<RunScreen> {
       },
       child: Scaffold(
         appBar: RunAppBar(
-          title: _course == null ? '러닝' : '코스 러닝',
+          title: widget.creatingCourse
+              ? '코스 만들기'
+              : (_course == null ? '러닝' : '코스 러닝'),
           userId: widget.userId,
           onSwap: _swap,
         ),
@@ -766,6 +822,13 @@ class _RunScreenState extends State<RunScreen> {
               coins: _coins,
               onTap: _pickAnotherCourse,
             ),
+          ),
+        if (widget.creatingCourse)
+          Positioned(
+            left: AppSpacing.md,
+            bottom: AppSpacing.md,
+            right: _devMode ? 160 : 72,
+            child: const _CreatingCourseChip(),
           ),
         // 나침반. 개발자 모드에서는 방향 버튼 한가운데로 들어갑니다.
         Positioned(
@@ -1251,6 +1314,98 @@ class _CourseFlag extends StatelessWidget {
         size: 12,
         color: finish ? AppColors.white : AppColors.black,
       ),
+    );
+  }
+}
+
+// 코스 만들기 중이라는 표시 (지도 왼쪽 아래)
+class _CreatingCourseChip extends StatelessWidget {
+  const _CreatingCourseChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.bottomLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md - 4,
+          vertical: AppSpacing.xs + 2,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.black,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+        child: Text(
+          '코스 만들기 · 달린 길이 사설 코스가 됩니다',
+          overflow: TextOverflow.ellipsis,
+          style: AppTheme.sans.copyWith(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: AppColors.white,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// 사설 코스 이름 받기. 비우거나 너무 길면 만들기를 누를 수 없습니다.
+class _CourseNameDialog extends StatefulWidget {
+  final String district;
+  final double km;
+
+  const _CourseNameDialog({required this.district, required this.km});
+
+  @override
+  State<_CourseNameDialog> createState() => _CourseNameDialogState();
+}
+
+class _CourseNameDialogState extends State<_CourseNameDialog> {
+  static const int maxLength = 16;
+  final TextEditingController _name = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  String get _trimmed => _name.text.trim();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('사설 코스로 만들까요?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${widget.district} · ${widget.km.toStringAsFixed(2)}km',
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _name,
+            autofocus: true,
+            maxLength: maxLength,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(hintText: '코스 이름 (예: 아침 당현천)'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('그만두기'),
+        ),
+        ElevatedButton(
+          onPressed: _trimmed.isEmpty
+              ? null
+              : () => Navigator.pop(context, _trimmed),
+          child: const Text('만들기'),
+        ),
+      ],
     );
   }
 }

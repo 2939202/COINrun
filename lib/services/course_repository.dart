@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../game/official_courses.dart';
+import '../game/route_simplifier.dart';
 import '../models/course.dart';
 
 // ============================================================
@@ -13,6 +15,15 @@ import '../models/course.dart';
 //   "구가 같은 것 + 하트순"을 Firestore에서 한 번에 하려면 복합 색인을 따로
 //   만들어야 합니다. 한 구의 코스는 많아야 수십 개라, 구로만 걸러 받은 뒤
 //   하트순 정렬은 폰에서 합니다.
+//
+// [사설 코스 만들기]
+//   "코스 만들기"로 한 번 달린 길을 그대로 코스로 올립니다. 점이 수천 개라
+//   경로 솎아내기(Douglas-Peucker)로 줄여서 저장합니다.
+//
+// [하트]
+//   courses/{id}/hearts/{uid} 문서가 있으면 그 사람이 하트를 누른 것입니다.
+//   하트 수(hearts)는 정렬하려고 코스 문서에 따로 들고 있고, 누르고 뗄 때
+//   트랜잭션으로 문서와 숫자를 같이 바꿉니다. 자기 코스에는 누를 수 없습니다.
 // ============================================================
 class CourseRepository {
   CourseRepository._();
@@ -20,6 +31,63 @@ class CourseRepository {
   static final CourseRepository instance = CourseRepository._();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  CollectionReference<Map<String, dynamic>> get _courses =>
+      _firestore.collection('courses');
+
+  // 달린 길을 사설 코스로 저장하고, 만든 코스의 id를 돌려줍니다.
+  Future<String> createUserCourse({
+    required String userId,
+    required String authorName,
+    required String name,
+    required String district,
+    required List<List<LatLng>> segments,
+  }) async {
+    final List<LatLng> path = RouteSimplifier.simplify(
+      Course.pathFromSegments(segments),
+    );
+    final Course course = Course(
+      id: '',
+      name: name,
+      district: district,
+      points: path,
+      authorName: authorName,
+      authorId: userId,
+    );
+    final doc = await _courses.add({
+      ...course.toUserCourseMap(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    return doc.id;
+  }
+
+  // 내가 이 코스에 하트를 눌렀는지
+  Stream<bool> watchHearted(String courseId, String userId) => _courses
+      .doc(courseId)
+      .collection('hearts')
+      .doc(userId)
+      .snapshots()
+      .map((doc) => doc.exists);
+
+  // 하트 누르기/떼기
+  Future<void> toggleHeart(String courseId, String userId) {
+    final DocumentReference<Map<String, dynamic>> course = _courses.doc(
+      courseId,
+    );
+    final DocumentReference<Map<String, dynamic>> heart = course
+        .collection('hearts')
+        .doc(userId);
+    return _firestore.runTransaction((transaction) async {
+      final mine = await transaction.get(heart);
+      if (mine.exists) {
+        transaction.delete(heart);
+        transaction.update(course, {'hearts': FieldValue.increment(-1)});
+      } else {
+        transaction.set(heart, {'at': FieldValue.serverTimestamp()});
+        transaction.update(course, {'hearts': FieldValue.increment(1)});
+      }
+    });
+  }
 
   List<Course> officialCourses(String district) =>
       OfficialCourses.inDistrict(district);
