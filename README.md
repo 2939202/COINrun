@@ -31,6 +31,7 @@
 사설 코스는 Firestore의 `courses` 컬렉션에서 읽습니다.
 
 지도는 OpenStreetMap 타일을 `flutter_map`으로 띄웁니다. 구글 지도가 아닙니다.
+출처는 지도 위가 아니라 설정 > 지도 및 데이터 출처에 모아 두었습니다.
 
 ## AI 평가
 
@@ -41,7 +42,10 @@
 | 점수(꾸준함·운동량·흐름), 기본 분석 문장 | `lib/game/run_insights.dart` |
 | 역치 페이스, 러닝 부하, 체력·피로, 급성:만성 부하비 | `lib/game/training_model.dart` |
 | 이번 주 목표의 허용 범위 | `lib/game/goal_policy.dart` |
+| 러닝 한 번의 부하도(1~5), 체감 보정 | `lib/game/run_load.dart`, `lib/game/felt_calibration.dart` |
+| 이번 주 목표 정하기·저장·달성률 | `lib/game/week_plan.dart`, `lib/services/week_coach.dart` |
 | Gemini 호출, 말투 검사, 저장 | `lib/services/ai_coach.dart` |
+| AI 문장 속 숫자가 보낸 사실에서 나왔는지 검사 | `lib/services/ai_guard.dart` |
 
 Gemini는 Firebase AI Logic으로 부릅니다. API 키를 앱에 넣지 않습니다.
 보내는 것은 기간별 숫자뿐이고, 경로와 이름은 보내지 않습니다.
@@ -76,7 +80,7 @@ flutter run
 처음 받아서 돌릴 때 콘솔에서 세 가지를 해야 합니다.
 
 1. Authentication > Sign-in method 에서 **익명**과 **이메일/비밀번호** 켜기
-2. Firestore Database > 규칙 에 저장소의 `firestore.rules` 내용 붙여넣고 게시
+2. Firestore 규칙 게시: `firebase deploy --only firestore:rules --project spot7123-3ad2d`
 3. AI Logic 에서 **Gemini Developer API** 켜기
 
 ## 확인

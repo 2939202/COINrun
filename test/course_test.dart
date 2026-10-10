@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:contact/game/honor_level.dart';
 import 'package:contact/game/official_courses.dart';
 import 'package:contact/models/course.dart';
 import 'package:contact/services/seoul_districts.dart';
@@ -112,6 +113,23 @@ void main() {
       expect(back.authorId, 'uid-1');
       expect(back.points, course.points);
       expect(back.official, isFalse);
+    });
+  });
+
+  group('명예 레벨', () {
+    test('코스가 없으면 0, 하나라도 만들면 1', () {
+      expect(const HonorLevel(courses: 0, hearts: 0).level, 0);
+      expect(const HonorLevel(courses: 1, hearts: 0).level, 1);
+      expect(const HonorLevel(courses: 0, hearts: 0).heartsToNext, isNull);
+    });
+
+    test('받은 하트로 오른다', () {
+      expect(const HonorLevel(courses: 2, hearts: 5).level, 2);
+      expect(const HonorLevel(courses: 2, hearts: 14).level, 2);
+      expect(const HonorLevel(courses: 2, hearts: 14).heartsToNext, 1);
+      expect(const HonorLevel(courses: 3, hearts: 40).level, 4);
+      expect(const HonorLevel(courses: 9, hearts: 250).level, 5);
+      expect(const HonorLevel(courses: 9, hearts: 250).heartsToNext, isNull);
     });
   });
 }

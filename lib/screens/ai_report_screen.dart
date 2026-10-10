@@ -6,9 +6,11 @@ import '../models/run_log.dart';
 import '../models/run_stats.dart';
 import '../services/ai_coach.dart';
 import '../services/user_repository.dart';
+import '../theme/ai_palette.dart';
 import '../theme/app_theme.dart';
 import '../widgets/notched_box.dart';
 import '../widgets/segment_bar.dart';
+import '../widgets/week_goal_card.dart';
 import '../utils/formatters.dart';
 
 // ============================================================
@@ -134,34 +136,58 @@ class _InsightTabState extends State<_InsightTab>
         if (report == null) {
           return const Center(child: CircularProgressIndicator());
         }
-        return ListView(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          children: [
-            // 검은 카드가 맨 위. 달력은 기록이 오기 전에도 빈 칸으로 먼저 그립니다.
-            StreamBuilder<List<RunLog>>(
-              stream: _monthRuns,
-              builder: (context, runs) => InsightScoreCard(
-                report: report,
-                calendar: RunCalendar.of(DateTime.now(), runs.data ?? const []),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            // 그 아래 AI 비서의 말풍선
-            AiAdvisorSection(report: report),
-            const SizedBox(height: AppSpacing.xl),
-            _CompareRow(report: report),
-            const SizedBox(height: AppSpacing.xl),
-            _DistanceBars(report: report),
-            const SizedBox(height: AppSpacing.xl),
-            Text(
-              '점수는 폰에서 계산합니다. 문장은 AI 비서(Gemini)가 숫자만 받아 작성하며, '
-              '경로와 이름은 보내지 않습니다.',
-              style: Theme.of(context).textTheme.labelMedium,
-              textAlign: TextAlign.center,
-            ),
-          ],
+        // 달력은 기록이 오기 전에도 빈 칸으로 먼저 그립니다.
+        return StreamBuilder<List<RunLog>>(
+          stream: _monthRuns,
+          builder: (context, runs) => InsightTabBody(
+            report: report,
+            calendar: RunCalendar.of(DateTime.now(), runs.data ?? const []),
+            // 주간 탭: 이번 주 목표 (훈련 부하 모델 -> 목표 범위 -> AI 비서)
+            goal: widget.range.isWeek
+                ? WeekGoalSection(userId: widget.userId)
+                : null,
+          ),
         );
       },
+    );
+  }
+}
+
+// 탭 한 장의 내용. 위에서부터 리포트 카드 -> AI 비서 말풍선 -> (이번 주 목표)
+// -> 지난번과 비교 -> 최근 거리 막대. 불러오기와 떼어 두어 그대로 그려볼 수 있습니다.
+class InsightTabBody extends StatelessWidget {
+  final InsightReport report;
+  final RunCalendar calendar;
+  final Widget? goal;
+
+  const InsightTabBody({
+    super.key,
+    required this.report,
+    required this.calendar,
+    this.goal,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      children: [
+        InsightScoreCard(report: report, calendar: calendar),
+        const SizedBox(height: AppSpacing.xl),
+        AiAdvisorSection(report: report),
+        const SizedBox(height: AppSpacing.xl),
+        if (goal != null) ...[goal!, const SizedBox(height: AppSpacing.xl)],
+        _CompareRow(report: report),
+        const SizedBox(height: AppSpacing.xl),
+        _DistanceBars(report: report),
+        const SizedBox(height: AppSpacing.xl),
+        Text(
+          '점수는 폰에서 계산합니다. 문장은 AI 비서(Gemini)가 숫자만 받아 작성하며, '
+          '경로와 이름은 보내지 않습니다.',
+          style: Theme.of(context).textTheme.labelMedium,
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 }
@@ -180,43 +206,69 @@ class InsightScoreCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextStyle small = AppTheme.sans.copyWith(
-      color: AppColors.sandOnDark,
-      fontSize: 13,
+      color: _ReportInk.muted,
+      fontSize: 11,
     );
 
+    // 한 줄에 점수(왼쪽)와 점수 내역(오른쪽)을 나란히 둬서 높이를 줄입니다.
+    // 색은 홈의 검은 카드와 반대로, 밝은 갈색 바탕에 먹색 글자입니다.
     return NotchedBox(
-      cut: 16,
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      cut: 12,
+      color: _ReportInk.card,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.sm + 4,
+        AppSpacing.md,
+        AppSpacing.xs,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '${report.range.label.toUpperCase()} REPORT',
-            style: AppTheme.caption.copyWith(color: AppColors.sandOnDark),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          // 등급(S~D)은 두지 않습니다. 점수만 보여줍니다.
-          Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                  text: '${report.score}',
-                  style: AppTheme.serifNumber.copyWith(
-                    fontSize: 56,
-                    color: AppColors.accentOnDark,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${report.range.label.toUpperCase()} REPORT',
+                    style: AppTheme.caption.copyWith(
+                      fontSize: 10,
+                      letterSpacing: 1.6,
+                      color: _ReportInk.muted,
+                    ),
                   ),
+                  const SizedBox(height: 2),
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: '${report.score}',
+                          style: AppTheme.serifNumber.copyWith(
+                            fontSize: 34,
+                            color: _ReportInk.accent,
+                          ),
+                        ),
+                        TextSpan(text: ' / 100', style: small),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  children: [
+                    _part('꾸준함', report.consistencyScore, 40, small),
+                    const SizedBox(height: 5),
+                    _part('운동량', report.volumeScore, 30, small),
+                    const SizedBox(height: 5),
+                    _part('흐름', report.trendScore, 30, small),
+                  ],
                 ),
-                TextSpan(text: '  / 100', style: small),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(height: AppSpacing.lg),
-          _part('꾸준함', report.consistencyScore, 40, small),
-          const SizedBox(height: AppSpacing.sm + 2),
-          _part('운동량', report.volumeScore, 30, small),
-          const SizedBox(height: AppSpacing.sm + 2),
-          _part('흐름', report.trendScore, 30, small),
-          const SizedBox(height: AppSpacing.lg),
           _FoldableCalendar(calendar: calendar, weekOnly: report.range.isWeek),
         ],
       ),
@@ -226,26 +278,34 @@ class InsightScoreCard extends StatelessWidget {
   Widget _part(String label, int value, int max, TextStyle style) {
     return Row(
       children: [
-        SizedBox(width: 52, child: Text(label, style: style)),
+        SizedBox(width: 38, child: Text(label, style: style)),
         Expanded(
           child: SegmentBar(
             progress: value / max,
-            filledColor: AppColors.accentOnDark,
-            emptyColor: AppColors.trackOnDark,
-            height: 8,
+            filledColor: _ReportInk.accent,
+            emptyColor: _ReportInk.track,
+            height: 5,
           ),
         ),
         SizedBox(
-          width: 52,
-          child: Text(
-            '$value / $max',
-            style: style,
-            textAlign: TextAlign.right,
-          ),
+          width: 40,
+          child: Text('$value/$max', style: style, textAlign: TextAlign.right),
         ),
       ],
     );
   }
+}
+
+// 리포트 카드의 색. AI 탭 공통 색(theme/ai_palette.dart)에서 가져옵니다.
+// 짙은 갈색 바탕에 종이색 글자, 점수와 채운 막대는 밝은 갈색입니다.
+class _ReportInk {
+  _ReportInk._();
+
+  static const Color card = AiPalette.deep; // 바탕
+  static const Color text = AiPalette.paper; // 글자
+  static const Color accent = AiPalette.soft; // 점수, 채운 막대
+  static const Color muted = Color(0xB3F7F1E6); // 종이색 70% - 작은 글자
+  static const Color track = Color(0x33F7F1E6); // 종이색 20% - 막대 바닥
 }
 
 // 이번 vs 지난번: 거리, 횟수, 페이스
@@ -276,7 +336,7 @@ class _CompareRow extends StatelessWidget {
           ],
         ),
         const SizedBox(height: AppSpacing.md),
-        Container(height: 1, color: AppColors.black),
+        Container(height: 1, color: AiPalette.ink),
         IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -285,24 +345,44 @@ class _CompareRow extends StatelessWidget {
                 '거리 km',
                 now.km.toStringAsFixed(1),
                 before.km.toStringAsFixed(1),
+                change: _Change.of(
+                  now.km - before.km,
+                  text: '${(now.km - before.km).abs().toStringAsFixed(1)}km',
+                ),
               ),
-              const VerticalDivider(color: AppColors.sand, width: 1),
-              _cell('러닝 횟수', '${now.runs}', '${before.runs}'),
-              const VerticalDivider(color: AppColors.sand, width: 1),
+              const VerticalDivider(color: AiPalette.pale, width: 1),
+              _cell(
+                '러닝 횟수',
+                '${now.runs}',
+                '${before.runs}',
+                change: _Change.of(
+                  (now.runs - before.runs).toDouble(),
+                  text: '${(now.runs - before.runs).abs()}회',
+                ),
+              ),
+              const VerticalDivider(color: AiPalette.pale, width: 1),
               _cell(
                 '평균 페이스',
                 formatPace(now.paceMinPerKm),
                 formatPace(before.paceMinPerKm),
+                // 페이스는 숫자가 작을수록(빠를수록) 좋아진 것입니다.
+                change: now.paceMinPerKm == null || before.paceMinPerKm == null
+                    ? null
+                    : _Change.of(
+                        before.paceMinPerKm! - now.paceMinPerKm!,
+                        text:
+                            '${((before.paceMinPerKm! - now.paceMinPerKm!).abs() * 60).round()}초',
+                      ),
               ),
             ],
           ),
         ),
-        Container(height: 1, color: AppColors.sand),
+        Container(height: 1, color: AiPalette.pale),
       ],
     );
   }
 
-  Widget _cell(String label, String now, String before) {
+  Widget _cell(String label, String now, String before, {_Change? change}) {
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(
@@ -318,11 +398,15 @@ class _CompareRow extends StatelessWidget {
                 now,
                 style: AppTheme.serifNumber.copyWith(
                   fontSize: 26,
-                  color: AppColors.black,
+                  color: AiPalette.ink,
                 ),
               ),
             ),
             const SizedBox(height: AppSpacing.xs),
+            if (change != null) ...[
+              change,
+              const SizedBox(height: AppSpacing.xs),
+            ],
             Text(
               '지난 $before',
               style: AppTheme.sans.copyWith(
@@ -415,7 +499,7 @@ class _DistanceBars extends StatelessWidget {
             period.km.toStringAsFixed(1),
             style: AppTheme.serifNumber.copyWith(
               fontSize: 12,
-              color: isCurrent ? AppColors.black : AppColors.mute,
+              color: isCurrent ? AiPalette.ink : AiPalette.mid,
             ),
           ),
           const SizedBox(height: AppSpacing.xs),
@@ -429,7 +513,7 @@ class _DistanceBars extends StatelessWidget {
                   Container(
                     height: ghostHeight,
                     decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.accent, width: 1),
+                      border: Border.all(color: AiPalette.mid, width: 1),
                       borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(4),
                       ),
@@ -438,7 +522,7 @@ class _DistanceBars extends StatelessWidget {
                 Container(
                   height: barHeight.clamp(2, _height),
                   decoration: BoxDecoration(
-                    color: isCurrent ? AppColors.accent : AppColors.sand,
+                    color: isCurrent ? AiPalette.deep : AiPalette.pale,
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(4),
                     ),
@@ -492,12 +576,16 @@ class _FoldableCalendarState extends State<_FoldableCalendar> {
           onTap: () => setState(() => _open = !_open),
           borderRadius: BorderRadius.circular(AppRadius.sm),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs + 2),
             child: Row(
               children: [
                 Text(
                   '${today.year}.${today.month.toString().padLeft(2, '0')} 달력',
-                  style: AppTheme.caption.copyWith(color: AppColors.sandOnDark),
+                  style: AppTheme.caption.copyWith(
+                    fontSize: 10,
+                    letterSpacing: 1.6,
+                    color: _ReportInk.muted,
+                  ),
                 ),
                 const Spacer(),
                 AnimatedRotation(
@@ -505,8 +593,8 @@ class _FoldableCalendarState extends State<_FoldableCalendar> {
                   duration: const Duration(milliseconds: 200),
                   child: const Icon(
                     Icons.expand_more,
-                    size: 20,
-                    color: AppColors.sandOnDark,
+                    size: 18,
+                    color: _ReportInk.muted,
                   ),
                 ),
               ],
@@ -557,7 +645,7 @@ class _CalendarGrid extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: AppTheme.sans.copyWith(
                     fontSize: 10,
-                    color: AppColors.sandOnDark.withValues(alpha: 0.7),
+                    color: _ReportInk.muted,
                   ),
                 ),
               ),
@@ -610,9 +698,10 @@ class _DayCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color ink = bright ? AppColors.black : AppColors.sandOnDark;
-    final Color fill = bright ? AppColors.accent : AppColors.accentOnDark;
-    final Color track = bright ? AppColors.sand : AppColors.trackOnDark;
+    // 리포트 카드가 밝은 갈색이라, 이번 기간은 먹색 칸으로 뒤집어 칠합니다.
+    final Color ink = bright ? AiPalette.ink : _ReportInk.text;
+    final Color fill = bright ? AiPalette.deep : _ReportInk.accent;
+    final Color track = bright ? AiPalette.pale : _ReportInk.track;
     final bool ran = km > 0 && !future;
 
     return Opacity(
@@ -622,12 +711,12 @@ class _DayCell extends StatelessWidget {
         margin: const EdgeInsets.all(1.5),
         padding: const EdgeInsets.fromLTRB(4, 3, 4, 4),
         decoration: BoxDecoration(
-          color: bright ? AppColors.white : Colors.transparent,
+          color: bright ? AiPalette.paper : Colors.transparent,
           borderRadius: BorderRadius.circular(5),
           // 오늘: 흰 칸에서는 검은 테두리, 검은 칸에서는 금빛 테두리
           border: today
               ? Border.all(
-                  color: bright ? AppColors.black : AppColors.accentOnDark,
+                  color: bright ? AiPalette.deep : _ReportInk.accent,
                   width: 1.6,
                 )
               : null,
@@ -723,7 +812,7 @@ class AiAdvisorSection extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _Bubble(
-                    dark: true,
+                    fill: AiPalette.ink,
                     child: Text(
                       report.headline,
                       style: AppTheme.serifNumber.copyWith(
@@ -734,7 +823,7 @@ class AiAdvisorSection extends StatelessWidget {
                     ),
                   ),
                   for (final comment in report.comments)
-                    _Bubble(child: _CommentLine(comment)),
+                    _Bubble.forTone(comment.tone, child: _CommentLine(comment)),
                 ],
               ),
             ),
@@ -781,11 +870,24 @@ class _AdvisorBadge extends StatelessWidget {
 }
 
 // 말풍선. 왼쪽 위 모서리만 덜 둥글게 해서 "AI" 쪽에서 나온 말처럼 보이게 합니다.
+// 조언은 뜻에 따라 명암이 다릅니다. (theme/ai_palette.dart)
 class _Bubble extends StatelessWidget {
   final Widget child;
-  final bool dark;
+  final Color fill;
+  final Color? border;
 
-  const _Bubble({required this.child, this.dark = false});
+  const _Bubble({required this.child, required this.fill, this.border});
+
+  factory _Bubble.forTone(InsightTone tone, {required Widget child}) =>
+      switch (tone) {
+        InsightTone.good => _Bubble(fill: AiPalette.goodFill, child: child),
+        InsightTone.warn => _Bubble(fill: AiPalette.badFill, child: child),
+        InsightTone.info => _Bubble(
+          fill: AiPalette.paper,
+          border: AiPalette.pale,
+          child: child,
+        ),
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -797,7 +899,8 @@ class _Bubble extends StatelessWidget {
           vertical: AppSpacing.sm + 3,
         ),
         decoration: BoxDecoration(
-          color: dark ? AppColors.black : AppColors.cream,
+          color: fill,
+          border: border == null ? null : Border.all(color: border!),
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(4),
             topRight: Radius.circular(AppRadius.md),
@@ -811,7 +914,7 @@ class _Bubble extends StatelessWidget {
   }
 }
 
-// 조언 한 줄: 앞에 작은 표시(잘한 점 / 주의 / 참고) + 문장
+// 조언 한 줄: 위에 ▲ 잘한 점 / ▼ 아쉬운 점 / · 참고, 아래에 문장
 class _CommentLine extends StatelessWidget {
   final InsightComment comment;
 
@@ -819,10 +922,10 @@ class _CommentLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (String label, Color color) = switch (comment.tone) {
-      InsightTone.good => ('잘한 점', AppColors.accent),
-      InsightTone.warn => ('주의', AppColors.error),
-      InsightTone.info => ('참고', AppColors.label),
+    final (String label, Color text, Color tag) = switch (comment.tone) {
+      InsightTone.good => ('▲ 잘한 점', AiPalette.goodText, AiPalette.soft),
+      InsightTone.warn => ('▼ 아쉬운 점', AiPalette.badText, AiPalette.deep),
+      InsightTone.info => ('· 참고', AiPalette.ink, AiPalette.mid),
     };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -832,15 +935,49 @@ class _CommentLine extends StatelessWidget {
           style: AppTheme.sans.copyWith(
             fontSize: 11,
             fontWeight: AppTheme.sansMedium,
-            color: color,
+            color: tag,
           ),
         ),
         const SizedBox(height: 3),
         Text(
           comment.text,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5),
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(height: 1.5, color: text),
         ),
       ],
+    );
+  }
+}
+
+// 비교 줄의 변화 표시. 좋아졌으면 짙은 칩(▲), 나빠졌으면 밝은 칩(▼), 같으면 없음.
+class _Change extends StatelessWidget {
+  final bool better;
+  final String text;
+
+  const _Change({required this.better, required this.text});
+
+  static _Change? of(double delta, {required String text}) {
+    if (delta.abs() < 1e-9) return null;
+    return _Change(better: delta > 0, text: text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: better ? AiPalette.goodFill : AiPalette.badFill,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Text(
+        '${better ? '▲' : '▼'} $text',
+        style: AppTheme.sans.copyWith(
+          fontSize: 11,
+          fontWeight: AppTheme.sansMedium,
+          color: better ? AiPalette.goodText : AiPalette.badText,
+        ),
+      ),
     );
   }
 }

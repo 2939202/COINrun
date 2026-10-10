@@ -4,6 +4,7 @@ import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/map_tiles.dart';
 import 'account_screen.dart';
 import 'trash_screen.dart';
 
@@ -17,11 +18,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  // 사운드 설정 상태 변수
-  // (아직 화면 안에서만 바뀌고 저장되지는 않습니다. 소리를 넣을 때 같이 붙일 예정입니다)
-  bool _isBgmEnabled = true;
-  bool _isSfxEnabled = true;
-
   late final Stream<UserModel?> _userStream = UserRepository.instance.watchUser(
     widget.userId,
   );
@@ -104,32 +100,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Divider(),
 
           // ------------------------------------------------------------
-          // 사운드 및 환경 설정 섹션
-          // ------------------------------------------------------------
-          const SettingsSectionHeader(title: '사운드 설정'),
-          SwitchListTile(
-            secondary: const Icon(Icons.music_note),
-            title: const Text('배경음악 (BGM)'),
-            value: _isBgmEnabled,
-            onChanged: (bool value) {
-              setState(() {
-                _isBgmEnabled = value;
-              });
-            },
-          ),
-          SwitchListTile(
-            secondary: const Icon(Icons.volume_up),
-            title: const Text('효과음 (SFX)'),
-            value: _isSfxEnabled,
-            onChanged: (bool value) {
-              setState(() {
-                _isSfxEnabled = value;
-              });
-            },
-          ),
-          const Divider(),
-
-          // ------------------------------------------------------------
           // 앱 정보 및 서비스 관리 섹션
           // ------------------------------------------------------------
           const SettingsSectionHeader(title: '앱 정보'),
@@ -139,14 +109,134 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing: Text('v1.0.0', style: TextStyle(color: Colors.grey)),
           ),
           ListTile(
+            leading: const Icon(Icons.map_outlined),
+            title: const Text('지도 및 데이터 출처'),
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (context) => const _CreditsDialog(),
+            ),
+          ),
+          ListTile(
             leading: const Icon(Icons.description_outlined),
             title: const Text('이용약관 및 개인정보 처리방침'),
-            onTap: () {
-              // 약관 모달 또는 웹뷰 연동 위치
-            },
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (context) => const _PrivacyDialog(),
+            ),
           ),
         ],
       ),
+    );
+  }
+}
+
+// 이용약관 및 개인정보 처리방침 (요약)
+//
+// 앱이 실제로 하는 일만 적습니다. 바뀌면 이 목록도 같이 고쳐야 합니다.
+//   위치: run_screen.dart / location_service.dart
+//   공개 범위: firestore.rules (users는 본인만, leaderboard·courses는 로그인한 사람)
+//   AI: ai_coach.dart, week_coach.dart (숫자만 보냄)
+class _PrivacyDialog extends StatelessWidget {
+  const _PrivacyDialog();
+
+  static const List<(String, String)> sections = [
+    (
+      '모으는 정보',
+      '닉네임, 이메일(이메일로 가입한 경우), 러닝 기록(거리·시간·걸음 수·경로·부하도), '
+          '레벨과 골드입니다.',
+    ),
+    (
+      '위치',
+      '러닝 화면을 연 동안에만 위치를 씁니다. 화면을 꺼도 기록되도록, 달리는 동안에만 '
+          '알림을 띄우고 위치를 받습니다. 경로는 본인만 볼 수 있습니다.',
+    ),
+    (
+      '다른 사람에게 보이는 것',
+      '랭킹에는 닉네임, 레벨, 누적 거리만 보입니다. 게스트는 랭킹에 오르지 않습니다. '
+          '사설 코스를 만들면 그 코스의 경로와 닉네임이 다른 사람에게 보입니다.',
+    ),
+    (
+      'AI 비서',
+      '주간·월간 기록에서 계산한 숫자(횟수, 거리, 시간, 페이스, 점수)만 Google Gemini에 '
+          '보냅니다. 경로, 닉네임, 이메일은 보내지 않습니다.',
+    ),
+    (
+      '보관과 삭제',
+      '러닝 기록은 최근 60개를 보관합니다. 사용자 설정에서 탈퇴하면 기록, 계정 정보, '
+          'AI 평가와 목표, 내가 만든 사설 코스가 삭제됩니다.',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme text = Theme.of(context).textTheme;
+    return AlertDialog(
+      title: const Text('개인정보 처리방침'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final (title, body) in sections) ...[
+              Text(title, style: text.titleSmall),
+              const SizedBox(height: 2),
+              Text(body, style: text.bodySmall?.copyWith(height: 1.5)),
+              const SizedBox(height: 12),
+            ],
+            Text(
+              '요약본입니다. 정식 출시 전에 전문을 보완합니다.',
+              style: text.labelSmall?.copyWith(color: AppColors.label),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('닫기'),
+        ),
+      ],
+    );
+  }
+}
+
+// 지도 및 데이터 출처. 지도 위에는 띄우지 않고 여기에 모아 둡니다.
+class _CreditsDialog extends StatelessWidget {
+  const _CreditsDialog();
+
+  static const List<(String, String)> credits = [
+    ('지도', '${MapTiles.attributionText}\nopenstreetmap.org/copyright (ODbL)'),
+    ('당현천 코스 경로', 'OpenStreetMap 데이터 (ODbL)'),
+    ('서울 구 경계', '통계청 2013 행정구역 경계\ngithub.com/southkorea/seoul-maps'),
+    ('AI 비서', 'Google Gemini (Firebase AI Logic)'),
+    ('글꼴', '함렛 Hahmlet (SIL Open Font License), 자연산스'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final TextTheme text = Theme.of(context).textTheme;
+    return AlertDialog(
+      title: const Text('지도 및 데이터 출처'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final (title, body) in credits) ...[
+              Text(title, style: text.titleSmall),
+              const SizedBox(height: 2),
+              Text(body, style: text.bodySmall?.copyWith(height: 1.5)),
+              const SizedBox(height: 12),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('닫기'),
+        ),
+      ],
     );
   }
 }

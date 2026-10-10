@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../game/honor_level.dart';
 import '../game/official_courses.dart';
 import '../game/route_simplifier.dart';
 import '../models/course.dart';
@@ -60,6 +61,21 @@ class CourseRepository {
     });
     return doc.id;
   }
+
+  // 내가 만든 사설 코스 수와 받은 하트 합 (명예 레벨)
+  Stream<HonorLevel> watchHonor(String userId) => _courses
+      .where('authorId', isEqualTo: userId)
+      .snapshots()
+      .map(
+        (query) => HonorLevel(
+          courses: query.docs.length,
+          hearts: query.docs.fold(
+            0,
+            (total, doc) =>
+                total + ((doc.data()['hearts'] as num?)?.toInt() ?? 0),
+          ),
+        ),
+      );
 
   // 내가 이 코스에 하트를 눌렀는지
   Stream<bool> watchHearted(String courseId, String userId) => _courses

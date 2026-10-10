@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../game/equipment_catalog.dart';
 import '../game/equipment_rules.dart';
+import '../game/honor_level.dart';
 import '../game/run_rules.dart';
 import '../models/equipment_set.dart';
 import '../models/user_model.dart';
+import '../services/course_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/gold_coin.dart';
 import '../widgets/notched_box.dart';
+import '../widgets/run_app_bar.dart' show GoldColors;
 import '../widgets/runner_figure.dart';
 import '../widgets/segment_bar.dart';
 import 'shop_screen.dart';
@@ -63,6 +66,8 @@ class ProfileScreen extends StatelessWidget {
                     children: [
                       const SizedBox(height: AppSpacing.md),
                       _NamePlate(user: userData),
+                      const SizedBox(height: AppSpacing.sm),
+                      _HonorLine(userId: userId),
                       const SizedBox(height: AppSpacing.md),
                       const SizedBox(height: 300, child: RunnerFigure()),
                       const SizedBox(height: AppSpacing.lg),
@@ -343,4 +348,66 @@ class _DotPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DotPainter oldDelegate) => false;
+}
+
+// 이름표 아래 명예 레벨 한 줄. 사설 코스를 만들고 하트를 받으면 오릅니다.
+class _HonorLine extends StatefulWidget {
+  final String userId;
+
+  const _HonorLine({required this.userId});
+
+  @override
+  State<_HonorLine> createState() => _HonorLineState();
+}
+
+class _HonorLineState extends State<_HonorLine> {
+  late final Stream<HonorLevel> _honor = CourseRepository.instance.watchHonor(
+    widget.userId,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<HonorLevel>(
+      stream: _honor,
+      builder: (context, snapshot) {
+        final HonorLevel? honor = snapshot.data;
+        if (honor == null) return const SizedBox(height: 18);
+        final TextStyle style = AppTheme.sans.copyWith(
+          fontSize: 12.5,
+          color: AppColors.label,
+        );
+        if (honor.level == 0) {
+          return Text('사설 코스를 만들면 명예 레벨이 오릅니다', style: style);
+        }
+        final int? left = honor.heartsToNext;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                gradient: GoldColors.metal,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+                border: Border.all(color: GoldColors.edge),
+              ),
+              child: Text(
+                '명예 Lv.${honor.level}',
+                style: AppTheme.sans.copyWith(
+                  fontSize: 12,
+                  fontWeight: AppTheme.sansMedium,
+                  color: AppColors.black,
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              '코스 ${honor.courses}개 · 하트 ${honor.hearts}'
+              '${left == null ? '' : ' · 다음까지 $left'}',
+              style: style,
+            ),
+          ],
+        );
+      },
+    );
+  }
 }

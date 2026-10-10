@@ -21,11 +21,15 @@ class RunReward {
   final int levelBefore;
   final int levelAfter;
 
+  // 저장된 기록의 id. 완료 창에서 고른 부하도를 나중에 같은 기록에 적을 때 씁니다.
+  final String? runId;
+
   const RunReward({
     required this.gold,
     required this.exp,
     required this.levelBefore,
     required this.levelAfter,
+    this.runId,
   });
 
   bool get leveledUp => levelAfter > levelBefore;

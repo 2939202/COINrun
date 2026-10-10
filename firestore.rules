@@ -3,9 +3,10 @@ rules_version = '2';
 // ============================================================
 // Firestore 보안 규칙
 //
-// [이 파일은 아직 적용되어 있지 않습니다]
-//   Firebase 콘솔 > Firestore Database > 규칙 에 아래 내용을 붙여넣고 "게시"를 눌러야
-//   실제로 적용됩니다. (또는 firebase deploy --only firestore:rules)
+// [적용]
+//   이 파일을 고친 뒤에는 게시해야 실제로 적용됩니다.
+//     firebase deploy --only firestore:rules --project spot7123-3ad2d
+//   (firebase.json이 이 파일을 가리킵니다. 콘솔 > Firestore > 규칙에서 이전 판으로 되돌릴 수 있습니다)
 //
 // [왜 필요한가]
 //   로그인이 붙으면서 계정마다 골드와 레벨이 생겼습니다. 규칙이 없으면
@@ -60,10 +61,15 @@ service cloud.firestore {
             || request.resource.data.hearts == resource.data.hearts - 1);
 
       // 누가 하트를 눌렀는지. 자기 줄만 만들고 지울 수 있습니다.
+      // 코스를 만든 사람은 탈퇴할 때 코스와 함께 하트 기록도 지울 수 있습니다.
       match /hearts/{userId} {
         allow read: if request.auth != null;
-        allow create, delete: if request.auth != null
+        allow create: if request.auth != null
           && request.auth.uid == userId;
+        allow delete: if request.auth != null
+          && (request.auth.uid == userId
+              || get(/databases/$(database)/documents/courses/$(courseId)).data.authorId
+                 == request.auth.uid);
       }
     }
 

@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'felt_calibration.dart';
 import 'stats_period.dart';
 import 'training_model.dart';
 
@@ -41,6 +42,8 @@ enum GoalReason {
   returning, // 쉬다 돌아와서 천천히
   attainmentHigh, // 지난 목표를 달성해서 올림
   attainmentLow, // 지난 목표가 버거워서 내림
+  feltHarder, // 계산보다 힘들게 느껴서 덜 올림
+  feltEasier, // 계산보다 쉽게 느껴서 조금 더
 }
 
 class WeekGoal {
@@ -105,6 +108,7 @@ class GoalPolicy {
     List<Session> sessions,
     DateTime now, {
     GoalResult? last,
+    FeltCalibration? felt,
   }) {
     final DateTime thisWeek = StatsPeriod.weekStart(now);
     final DateTime sunday = DateTime(
@@ -116,7 +120,7 @@ class GoalPolicy {
       sessions.where((s) => s.day.isBefore(thisWeek)).toList(),
       sunday,
     );
-    return forWeek(before, now, last: last);
+    return forWeek(before, now, last: last, felt: felt);
   }
 
   // state는 이번 주가 시작되기 전까지의 기록으로 만든 것이어야 합니다. (plan이 맞춰 줍니다)
@@ -124,6 +128,7 @@ class GoalPolicy {
     TrainingState state,
     DateTime now, {
     GoalResult? last,
+    FeltCalibration? felt,
   }) {
     final DateTime thisWeek = StatsPeriod.weekStart(now);
 
@@ -203,10 +208,24 @@ class GoalPolicy {
       }
     }
 
+    // 체감 보정: 늘 계산보다 힘들게 느끼면 덜 올리고, 쉽게 느끼면 조금 더 올립니다.
+    if (felt != null && !state.overreaching) {
+      if (felt.feelsHarder) {
+        high = min(high, 1.03);
+        reasons.add(GoalReason.feltHarder);
+      } else if (felt.feelsEasier) {
+        high += 0.02;
+        reasons.add(GoalReason.feltEasier);
+      }
+    }
+
     // 횟수: 평소 횟수(활동한 주의 평균). 달성했으면 1회 더, 최대 5회
     final List<int> active = weekRuns.where((r) => r > 0).toList();
     int runs = (active.fold(0, (a, b) => a + b) / active.length).round();
-    if (attainment != null && attainment >= 1.0 && !state.overreaching) {
+    if (attainment != null &&
+        attainment >= 1.0 &&
+        !state.overreaching &&
+        !(felt?.feelsHarder ?? false)) {
       runs += 1;
     }
     if (state.overreaching) runs = max(2, runs - 1);

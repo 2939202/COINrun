@@ -10,8 +10,10 @@ import 'package:vibration/vibration.dart';
 
 import '../game/course_coins.dart';
 import '../game/equipment_rules.dart';
+import '../game/run_load.dart';
 import '../game/run_rules.dart';
 import '../game/run_tracker.dart';
+import '../game/training_model.dart';
 import '../models/course.dart';
 import '../models/equipment_set.dart';
 import '../models/run_record.dart';
@@ -408,12 +410,14 @@ class _RunScreenState extends State<RunScreen> {
     try {
       final Course? course = _course;
       final CourseCoins? coins = _coins;
+      final RunLoad load = await _loadOf(record);
       final RunReward reward = await UserRepository.instance.saveRun(
         widget.userId,
         record,
         course: course == null || coins == null
             ? null
             : CourseResult.of(course.id, coins),
+        load: load,
       );
       if (!mounted) return;
 
@@ -424,7 +428,8 @@ class _RunScreenState extends State<RunScreen> {
       });
       // 다 달렸으니 알림을 내립니다.
       _startGps(withForegroundService: false);
-      await showRunReport(context, record, reward);
+      final int felt = await showRunReport(context, record, reward, load);
+      _saveFeltLoad(reward.runId, felt, load.level);
       if (widget.creatingCourse && mounted) await _offerToSaveCourse(record);
     } catch (e) {
       // 저장에 실패하면 기록을 그대로 두고 일시정지 상태로 두어 다시 시도할 수 있게 합니다.
@@ -432,6 +437,36 @@ class _RunScreenState extends State<RunScreen> {
       setState(() => _isSaving = false);
       _showMessage('기록 저장에 실패했어요. 인터넷 연결을 확인하고 다시 완료를 눌러주세요.');
     }
+  }
+
+  // 완료 창에서 고른 부하도를 기록에 적습니다. 실패해도 기록 자체는 이미 저장돼 있어서
+  // 조용히 넘어갑니다. (계산값은 저장할 때 이미 들어갔습니다)
+  void _saveFeltLoad(String? runId, int level, int computed) {
+    if (runId == null) return;
+    UserRepository.instance
+        .saveFeltLoad(
+          widget.userId,
+          runId,
+          level: level,
+          computedLevel: computed,
+        )
+        .catchError((Object error) => debugPrint('부하도 저장 실패: $error'));
+  }
+
+  // 이번 러닝의 부하도. 역치 페이스를 지난 기록으로 추정해야 해서 기록을 한 번 읽습니다.
+  // 못 읽으면(인터넷이 없을 때 등) 입문 기본값으로 계산합니다. 저장을 막지는 않습니다.
+  Future<RunLoad> _loadOf(RunRecord record) async {
+    List<Session> history = const [];
+    try {
+      final runs = await UserRepository.instance
+          .watchRecentRuns(widget.userId, limit: UserRepository.maxStoredRuns)
+          .first
+          .timeout(const Duration(seconds: 5));
+      history = [for (final log in runs) ?Session.fromLog(log)];
+    } catch (error) {
+      debugPrint('부하도 계산용 기록 읽기 실패: $error');
+    }
+    return RunLoad.of(record, history, now: DateTime.now());
   }
 
   // 방금 달린 길을 사설 코스로 올릴지 묻고, 이름을 받아 저장합니다.

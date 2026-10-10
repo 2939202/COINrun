@@ -6,6 +6,7 @@ import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../game/run_insights.dart';
+import 'ai_guard.dart';
 
 // ============================================================
 // AI 비서 - AI 평가의 한 줄 평과 조언을 Gemini가 씁니다.
@@ -40,8 +41,10 @@ class AiCoach {
   static const Duration timeout = Duration(seconds: 12);
 
   // 말투 규칙. 비서처럼 정중하고 나서지 않으며, 자신이 AI임을 압니다.
-  static const String systemInstruction = '''
-당신은 러닝 앱 "달리랑"의 AI 비서입니다. 사용자의 주간 또는 월간 러닝 기록 숫자를 받아 짧은 평가를 작성합니다.
+  // 말투 규칙. 비서처럼 정중하고 나서지 않으며, 자신이 AI임을 압니다.
+  // 주간 평가와 이번 주 목표(week_coach.dart)가 같이 씁니다.
+  static const String toneRules = '''
+당신은 러닝 앱 "달리랑"의 AI 비서입니다. 사용자의 러닝 기록에서 계산한 숫자를 받아 짧게 씁니다.
 
 지켜야 할 것:
 - 당신은 AI 비서이며 그 사실을 알고 있습니다. 사람인 척하지 않습니다. 자기소개는 하지 않습니다.
@@ -50,11 +53,16 @@ class AiCoach {
   예: "달렸습니다.", "줄었습니다.", "있습니다.", "좋습니다.", "수준입니다.", "것으로 보입니다."
   "합니다.", "됩니다.", "바랍니다.", "드립니다.", "권장합니다."처럼 끝내지 않습니다.
   권할 때는 "~하는 것이 좋습니다."처럼 씁니다. 질문하지 않습니다. "~요"체와 반말은 쓰지 않습니다.
-- 받은 숫자에 근거해 객관적이고 정량적으로 씁니다. 거리, 횟수, 시간, 페이스, 증감을 숫자로 밝힙니다.
+- 받은 숫자에 근거해 객관적이고 정량적으로 씁니다. 받은 숫자 외의 숫자는 쓰지 않습니다.
 - 받지 않은 사실(날씨, 몸 상태, 심박, 식사 등)은 지어내지 않습니다.
 - 이모티콘, 이모지, 느낌표, 물결표 같은 꾸밈 기호를 쓰지 않습니다.
 - 의학적 진단이나 처방을 하지 않습니다.
+''';
 
+  // 주간/월간 평가
+  static const String systemInstruction =
+      '''
+$toneRules
 출력은 JSON 하나입니다.
 - headline: 40자 이내의 한 문장. 이번 기간을 숫자로 요약합니다.
 - comments: 2개 또는 3개. 각 text는 80자 이내의 한두 문장입니다.
@@ -133,10 +141,14 @@ class AiCoach {
     }
 
     try {
+      final String prompt = buildPrompt(report);
       final response = await _model
-          .generateContent([Content.text(buildPrompt(report))])
+          .generateContent([Content.text(prompt)])
           .timeout(timeout);
-      final AiWords? words = parse(response.text);
+      final AiWords? words = parse(
+        response.text,
+        allowedNumbers: AiGuard.allowedFrom(prompt),
+      );
       if (words == null) {
         lastError = '답의 형식이 맞지 않습니다';
         return cached;
@@ -215,12 +227,14 @@ class AiCoach {
   ].join('|');
 
   // Gemini 답 -> 문장. 형식이 틀리면 null (화면은 규칙 문장을 씁니다)
-  static AiWords? parse(String? text) {
+  //
+  // allowedNumbers를 주면 보낸 사실에 없는 숫자가 든 문장을 버립니다. (ai_guard.dart)
+  static AiWords? parse(String? text, {AllowedNumbers? allowedNumbers}) {
     if (text == null || text.trim().isEmpty) return null;
     try {
       final Object? decoded = jsonDecode(text);
       if (decoded is! Map<String, dynamic>) return null;
-      return AiWords.fromMap(decoded);
+      return AiWords.fromMap(decoded, allowedNumbers: allowedNumbers);
     } catch (_) {
       return null;
     }
@@ -257,7 +271,13 @@ class AiWords {
 
   const AiWords({required this.headline, required this.comments});
 
-  static AiWords? fromMap(Map<String, dynamic> map) {
+  static AiWords? fromMap(
+    Map<String, dynamic> map, {
+    AllowedNumbers? allowedNumbers,
+  }) {
+    bool ok(String text) =>
+        AiCoach.isFormal(text) &&
+        (allowedNumbers == null || AiGuard.supported(text, allowedNumbers));
     final String headline = AiCoach.clean(map['headline'] as String? ?? '');
     final List<InsightComment> comments = [
       for (final item in (map['comments'] as List<dynamic>? ?? const []))
@@ -266,9 +286,9 @@ class AiWords {
             _tone(item['tone'] as String?),
             AiCoach.clean(item['text'] as String? ?? ''),
           ),
-    ].where((comment) => AiCoach.isFormal(comment.text)).toList();
-    // 한 줄 평이 어미를 어기면 통째로 버리고 기본 분석을 씁니다.
-    if (!AiCoach.isFormal(headline) || comments.isEmpty) return null;
+    ].where((comment) => ok(comment.text)).toList();
+    // 한 줄 평이 어미를 어기거나 없는 숫자를 쓰면 통째로 버리고 기본 분석을 씁니다.
+    if (!ok(headline) || comments.isEmpty) return null;
     return AiWords(headline: headline, comments: comments.take(3).toList());
   }
 

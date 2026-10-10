@@ -77,7 +77,6 @@ class RouteMap extends StatelessWidget {
             ),
           ],
         ),
-        MapTiles.attribution(),
       ],
     );
   }

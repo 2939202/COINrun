@@ -24,8 +24,8 @@ import '../theme/app_theme.dart';
 //   색이 빠지면 그 위에 그린 경로선만 또렷하게 남습니다.
 //
 // [출처 표시]
-//   OpenStreetMap은 지도에 출처를 적어두기를 요구합니다. 지도를 쓰는 곳마다 같이
-//   넣어야 해서 타일과 한 파일에 묶어둡니다.
+//   지도 위에는 출처를 띄우지 않고, 설정 > 지도 및 데이터 출처에 모아 둡니다.
+//   (screens/settings_screen.dart의 출처 목록이 attributionText를 씁니다)
 // ============================================================
 class MapTiles {
   MapTiles._();
@@ -33,6 +33,8 @@ class MapTiles {
   static const String _url = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
   static const String attributionText = '© OpenStreetMap contributors';
+
+  static const String userAgent = 'app.dalirang.rpg';
 
   // 채도를 낮추는 행렬. 마지막 줄은 투명도라 건드리지 않습니다.
   static const List<double> _desaturate = <double>[
@@ -72,18 +74,13 @@ class MapTiles {
           colorFilter: const ColorFilter.matrix(_desaturate),
           child: TileLayer(
             urlTemplate: _url,
-            userAgentPackageName: 'com.example.contact',
+            // OpenStreetMap은 요청한 앱을 이 이름으로 구분합니다. Flutter 기본값인
+            // com.example.*은 막히는 일이 있어서 이 앱만의 이름을 씁니다.
+            // (앱 패키지 이름과는 상관없습니다)
+            userAgentPackageName: userAgent,
           ),
         ),
       ),
     ];
-  }
-
-  // 출처 표시. FlutterMap의 children 맨 뒤에 넣습니다.
-  static Widget attribution() {
-    return const SimpleAttributionWidget(
-      source: Text(attributionText, style: TextStyle(fontSize: 10)),
-      backgroundColor: Color(0xCCFFFFFF),
-    );
   }
 }

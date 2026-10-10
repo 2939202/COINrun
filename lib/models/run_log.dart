@@ -16,6 +16,10 @@ class RunLog {
   // 걸음 센서 없이 거리로 추정한 걸음 수인지. 추정값이면 케이던스(분당 걸음)를 믿을 수 없어서
   // 걷기/달리기 구분에 쓰지 않습니다. (game/training_model.dart)
   final bool stepsEstimated;
+
+  // 부하도 (game/run_load.dart). 부하도를 넣기 전 기록에는 없습니다.
+  final int? loadLevel; // 공식으로 계산한 단계
+  final int? feltLevel; // 완료 창에서 사용자가 고른(그대로 둔) 단계
   final int goldEarned;
   final int expEarned;
 
@@ -38,6 +42,8 @@ class RunLog {
     required this.movingSeconds,
     required this.steps,
     this.stepsEstimated = false,
+    this.loadLevel,
+    this.feltLevel,
     required this.goldEarned,
     required this.expEarned,
     required this.hidden,
@@ -56,6 +62,8 @@ class RunLog {
       movingSeconds: (map['movingSeconds'] as num?)?.toInt() ?? 0,
       steps: (map['steps'] as num?)?.toInt() ?? 0,
       stepsEstimated: map['stepsEstimated'] as bool? ?? false,
+      loadLevel: (map['loadLevel'] as num?)?.toInt(),
+      feltLevel: (map['feltLevel'] as num?)?.toInt(),
       goldEarned: (map['goldEarned'] as num?)?.toInt() ?? 0,
       expEarned: (map['expEarned'] as num?)?.toInt() ?? 0,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate(),

@@ -7,6 +7,7 @@ import '../game/equipment_rules.dart';
 import '../game/route_simplifier.dart';
 import '../game/run_totals.dart';
 import '../game/stats_period.dart';
+import '../game/run_load.dart';
 import '../game/run_rules.dart';
 import '../models/equipment_set.dart';
 import '../models/run_log.dart';
@@ -462,6 +463,20 @@ class UserRepository {
     await _deleteAll(_routes(userId));
     await _deleteAll(_stats(userId));
     await _deleteAll(_trash(userId));
+    // AI 비서가 쓴 평가 저장본과 이번 주 목표
+    await _deleteAll(_userDoc(userId).collection('insights'));
+    await _deleteAll(_userDoc(userId).collection('goals'));
+
+    // 내가 만든 사설 코스. 코스 아래 하트 기록부터 지워야 주인 없는 문서가 남지 않습니다.
+    // (내가 남의 코스에 누른 하트는 남습니다. 찾으려면 컬렉션 그룹 색인이 따로 필요합니다)
+    final mine = await _firestore
+        .collection('courses')
+        .where('authorId', isEqualTo: userId)
+        .get(const GetOptions(source: Source.server));
+    for (final course in mine.docs) {
+      await _deleteAll(course.reference.collection('hearts'));
+      await course.reference.delete();
+    }
 
     await _userDoc(userId).delete();
   }
@@ -494,12 +509,32 @@ class UserRepository {
   // 골드가 덮어써져 사라지지 않도록 하기 위해서입니다.
   //
   // course: 코스 러닝이었으면 먹은 코인. 이때 골드는 코인으로만 줍니다.
+  // 완료 창에서 사용자가 고른(또는 그대로 둔) 부하도를 기록에 적습니다.
+  // 계산값(loadLevel)은 그대로 두고 따로 적어서, 둘의 차이로 개인 보정을 할 수 있게 합니다.
+  Future<void> saveFeltLoad(
+    String userId,
+    String runId, {
+    required int level,
+    required int computedLevel,
+  }) {
+    return _userDoc(userId).collection('runs').doc(runId).update({
+      'feltLevel': level,
+      'feltLevelEdited': level != computedLevel,
+    });
+  }
+
   Future<RunReward> saveRun(
     String userId,
     RunRecord run, {
     CourseResult? course,
+    RunLoad? load,
   }) async {
-    final RunReward reward = await _saveRunInTransaction(userId, run, course);
+    final RunReward reward = await _saveRunInTransaction(
+      userId,
+      run,
+      course,
+      load,
+    );
 
     // 오래된 기록 정리는 보상 저장과 따로 합니다.
     // 정리하다 실패해도 이미 받은 보상이 사라지면 안 되기 때문입니다.
@@ -542,6 +577,7 @@ class UserRepository {
     String userId,
     RunRecord run,
     CourseResult? course,
+    RunLoad? load,
   ) {
     final userDoc = _userDoc(userId);
 
@@ -618,6 +654,8 @@ class UserRepository {
           'coinsTotal': course.coinsTotal,
           'courseCompleted': course.completed,
         },
+        // 이번 러닝의 부하도 (game/run_load.dart). AI 분석과 기록 화면에서 씁니다.
+        if (load != null) ...load.toMap(),
         'hidden': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -643,6 +681,7 @@ class UserRepository {
         exp: exp,
         levelBefore: user.level,
         levelAfter: next.level,
+        runId: runRef.id,
       );
     });
   }
