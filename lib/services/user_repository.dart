@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 
+import '../game/character_outfit.dart';
 import '../game/course_coins.dart';
 import '../game/equipment_catalog.dart';
 import '../game/equipment_rules.dart';
@@ -257,6 +258,35 @@ class UserRepository {
     _userDoc(userId)
         .set({'prefersCourseRun': course}, SetOptions(merge: true))
         .catchError((Object error) => debugPrint('러닝 방식 저장 실패: $error'));
+  }
+
+  // 처음 들어올 때 고른 캐릭터 모습(남/여)을 저장합니다. (UserModel.look)
+  // 한 번 정하면 바꿀 수 없습니다. 이미 정해져 있으면 그대로 둡니다.
+  // (firestore.rules도 바뀌는 것을 막습니다)
+  Future<void> chooseLook(String userId, CharacterLook look) async {
+    final userDoc = _userDoc(userId);
+    final UserModel? user = await _firestore.runTransaction((
+      transaction,
+    ) async {
+      final snapshot = await transaction.get(userDoc);
+      if (!snapshot.exists) return null;
+      final UserModel current = UserModel.fromMap(snapshot.data()!);
+      if (current.look != null) return null;
+      transaction.set(userDoc, {'look': look.id}, SetOptions(merge: true));
+      return current;
+    });
+    // 대결 상대 목록에도 겉모습을 올립니다. 게스트는 랭킹에 없으므로 건너뜁니다.
+    if (user != null && !user.isGuest) {
+      await RankingRepository.instance
+          .entryDoc(userId)
+          .set(
+            RankingRepository.appearanceData(
+              look: look,
+              setId: user.equippedSetId,
+            ),
+            SetOptions(merge: true),
+          );
+    }
   }
 
   // 목록에서만 감춥니다. 통계와 보상은 그대로 둡니다.
@@ -732,6 +762,14 @@ class UserRepository {
       transaction.set(userDoc, {
         'equippedSetId': setId,
       }, SetOptions(merge: true));
+      // 대결 상대 목록에도 입은 옷을 올립니다. 게스트는 랭킹에 없으므로 건너뜁니다.
+      if (!user.isGuest) {
+        transaction.set(
+          RankingRepository.instance.entryDoc(userId),
+          RankingRepository.appearanceData(look: user.look, setId: setId),
+          SetOptions(merge: true),
+        );
+      }
     });
   }
 }

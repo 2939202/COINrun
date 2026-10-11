@@ -1,3 +1,5 @@
+import '../game/character_outfit.dart';
+
 // ============================================================
 // 랭킹 목록에 보이는 한 줄
 //
@@ -6,6 +8,7 @@
 // 있게 잠가두었는데, 랭킹을 보려면 남의 것도 읽어야 합니다. 그래서 남에게 보여도
 // 되는 값(이름, 레벨, 누적 거리)만 이 컬렉션에 따로 복사해 둡니다.
 // 골드나 이메일은 여기에 들어오지 않습니다.
+// 게임 플레잉 대결에서 상대를 그리려고 겉모습(남/여, 입은 세트)도 같이 둡니다.
 // ============================================================
 class RankingEntry {
   final String userId;
@@ -13,6 +16,8 @@ class RankingEntry {
   final int level;
   final double totalDistance; // 거리 랭킹 기준 (m)
   final int totalExp; // 레벨 랭킹 기준
+  final CharacterLook? look; // 겉모습을 올리기 전 줄에는 없습니다.
+  final String? equippedSetId;
 
   const RankingEntry({
     required this.userId,
@@ -20,6 +25,8 @@ class RankingEntry {
     required this.level,
     required this.totalDistance,
     required this.totalExp,
+    this.look,
+    this.equippedSetId,
   });
 
   factory RankingEntry.fromMap(String userId, Map<String, dynamic> map) {
@@ -29,6 +36,8 @@ class RankingEntry {
       level: (map['level'] as num?)?.toInt() ?? 1,
       totalDistance: (map['totalDistance'] as num?)?.toDouble() ?? 0,
       totalExp: (map['totalExp'] as num?)?.toInt() ?? 0,
+      look: CharacterLook.tryParse(map['look']),
+      equippedSetId: map['equippedSetId'] as String?,
     );
   }
 }

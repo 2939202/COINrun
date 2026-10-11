@@ -209,6 +209,7 @@ class _CreditsDialog extends StatelessWidget {
     ('당현천 코스 경로', 'OpenStreetMap 데이터 (ODbL)'),
     ('서울 구 경계', '통계청 2013 행정구역 경계\ngithub.com/southkorea/seoul-maps'),
     ('AI 비서', 'Google Gemini (Firebase AI Logic)'),
+    ('3D 캐릭터 표시', 'three.js r160 (MIT License)'),
     ('글꼴', '함렛 Hahmlet (SIL Open Font License), 자연산스'),
   ];
 

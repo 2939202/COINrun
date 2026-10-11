@@ -50,6 +50,25 @@
 Gemini는 Firebase AI Logic으로 부릅니다. API 키를 앱에 넣지 않습니다.
 보내는 것은 기간별 숫자뿐이고, 경로와 이름은 보내지 않습니다.
 
+## 3D 캐릭터
+
+처음 들어올 때 남자·여자를 한 번 고르고, 그 뒤로는 바꿀 수 없습니다.
+캐릭터는 홈 카드(얼굴), 내 캐릭터, 게임 플레잉 대결에서 3D로 보입니다. 파일 하나(`assets/models/character.glb`)에
+남녀 머리, 몸, 옷이 같은 자리에 겹쳐 있고, 입은 세트에 맞는 파츠만 켭니다.
+(`lib/game/character_outfit.dart`)
+
+| | 장비 없음 | 초급(천옷) | 중급(가죽옷) | 고급(갑옷) |
+|---|---|---|---|---|
+| 남 | head ArmLeg basic | head ArmLeg fabric | head ArmLeg leather | head armor |
+| 여 | womanHEAD woman | womanHEAD ArmLeg fabric | womanHEAD ArmLeg leather | womanHEAD armor |
+
+- 웹뷰 안에서 three.js(r160, `assets/viewer/`)로 그립니다. 인터넷 없이 뜨도록
+  앱 안의 작은 서버(`lib/services/asset_server.dart`, 127.0.0.1)가 파일을 내줍니다.
+- 대결의 때리기·맞기·피하기는 뼈대 없이 몸 전체를 움직여서 만듭니다.
+- 그림체: 작게 그린 뒤 픽셀 그대로 키우고, 캐릭터 위에만 노이즈를 얹습니다.
+- 원본 모델(372MB)은 텍스처를 2048px로, 메시를 생김새가 바뀌지 않는 선까지 줄여
+  13MB로 넣었습니다. (gltf-transform simplify·quantize)
+
 ## 폴더
 
 | 폴더 | 무엇이 들어 있나 |
@@ -59,7 +78,7 @@ Gemini는 Firebase AI Logic으로 부릅니다. API 키를 앱에 넣지 않습�
 | `lib/services/` | 바깥 세상과 이야기하는 곳. Firebase, GPS, 걸음 센서, Gemini |
 | `lib/screens/` | 화면 |
 | `lib/widgets/` | 화면 여러 곳에서 같이 쓰는 조각 |
-| `assets/` | 글꼴(함렛, 자연산스), 캐릭터 그림, 3D 모델, 서울 구 경계 |
+| `assets/` | 글꼴(함렛, 자연산스), 캐릭터 그림, 3D 모델과 뷰어, 서울 구 경계 |
 | `history/` | 날짜별 작업 이력. 무엇을 왜 그렇게 만들었는지 |
 
 규칙은 화면과 떼어 놓았습니다. 디자인을 새로 만들어도 `lib/game/`은 그대로 씁니다.

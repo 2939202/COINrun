@@ -3,15 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:vibration/vibration.dart';
 
+import '../game/character_outfit.dart';
 import '../game/pvp_battle.dart';
 import '../models/ranking_entry.dart';
 import '../models/user_model.dart';
 import '../services/ranking_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/character_view.dart';
 import '../widgets/notched_box.dart';
 
 // ============================================================
-// 롤 플레잉(PVP)
+// 게임 플레잉(PVP)
 //
 // 상대 고르기 -> 자동 대결 화면.
 // 상대는 랭킹 목록(leaderboard)에서 고릅니다. 내 레벨과 가까운 사람부터 보여줍니다.
@@ -45,11 +47,23 @@ class _PvpScreenState extends State<PvpScreen> {
     totalKm: entry.totalDistance / 1000,
   );
 
-  void _challenge(Fighter opponent) {
+  void _challenge(RankingEntry entry) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => BattleScreen(challenger: _me, opponent: opponent),
+        builder: (context) => BattleScreen(
+          challenger: _me,
+          opponent: _fighterOf(entry),
+          challengerParts: CharacterOutfit.partsFor(
+            widget.user.look ?? CharacterLook.female,
+            widget.user.equippedSetId,
+          ),
+          // 겉모습을 올리기 전의 상대는 여자 기본 옷으로 그립니다.
+          opponentParts: CharacterOutfit.partsFor(
+            entry.look ?? CharacterLook.female,
+            entry.equippedSetId,
+          ),
+        ),
       ),
     );
   }
@@ -60,7 +74,7 @@ class _PvpScreenState extends State<PvpScreen> {
     final Fighter me = _me;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('롤 플레잉')),
+      appBar: AppBar(title: const Text('게임 플레잉')),
       body: StreamBuilder<List<RankingEntry>>(
         stream: _board,
         builder: (context, snapshot) {
@@ -109,7 +123,7 @@ class _PvpScreenState extends State<PvpScreen> {
                   _OpponentTile(
                     fighter: _fighterOf(entry),
                     myPower: me.power,
-                    onChallenge: () => _challenge(_fighterOf(entry)),
+                    onChallenge: () => _challenge(entry),
                   ),
                   const Divider(),
                 ],
@@ -257,15 +271,22 @@ class _OpponentTile extends StatelessWidget {
 
 // ============================================================
 // 대결 화면 - 계산은 한 번에 끝내 두고, 한 차례씩 보여줍니다.
+// 가운데 3D에서 두 캐릭터가 마주 보고, 차례마다 치고 맞습니다.
 // ============================================================
 class BattleScreen extends StatefulWidget {
   final Fighter challenger;
   final Fighter opponent;
 
+  // 3D로 그릴 두 사람의 파츠 (game/character_outfit.dart)
+  final List<String> challengerParts;
+  final List<String> opponentParts;
+
   const BattleScreen({
     super.key,
     required this.challenger,
     required this.opponent,
+    required this.challengerParts,
+    required this.opponentParts,
   });
 
   @override
@@ -346,17 +367,21 @@ class _BattleScreenState extends State<BattleScreen> {
               hp: theirHp,
               hit: last != null && last.byChallenger && last.damage > 0,
             ),
-            const SizedBox(height: AppSpacing.md),
-            Center(
-              child: Text(
-                'VS',
-                style: AppTheme.serifNumber.copyWith(
-                  fontSize: 28,
-                  color: AppColors.accent,
-                ),
+            // 왼쪽이 나, 오른쪽이 상대입니다.
+            SizedBox(
+              height: 220,
+              child: CharacterView(
+                me: widget.challengerParts,
+                foe: widget.opponentParts,
+                strike: last == null
+                    ? null
+                    : CharacterStrike(
+                        turn: _shown,
+                        byMe: last.byChallenger,
+                        landed: !last.dodged && last.damage > 0,
+                      ),
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
             _HpBar(
               fighter: widget.challenger,
               hp: myHp,

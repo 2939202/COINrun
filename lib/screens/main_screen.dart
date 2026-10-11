@@ -12,9 +12,10 @@ import '../widgets/home_widgets.dart';
 import '../widgets/notched_box.dart';
 import '../widgets/run_log_tile.dart';
 import 'ai_report_screen.dart'; //AI 평가
+import 'character_pick_screen.dart'; //처음 캐릭터 고르기
 import 'course_screen.dart'; //코스 고르기
 import 'profile_screen.dart'; //프로필
-import 'pvp_screen.dart'; //롤 플레잉
+import 'pvp_screen.dart'; //게임 플레잉
 import 'ranking_screen.dart'; //랭킹
 import 'run_detail_screen.dart'; //러닝 기록 상세
 import 'run_history_screen.dart'; //전체 기록
@@ -23,7 +24,7 @@ import 'settings_screen.dart'; //설정
 
 // ============================================================
 // 홈 화면
-//   인사 -> 레벨 카드 -> 누적 기록 -> 네모 카드(롤 플레잉/내 캐릭터/AI 평가/랭킹) -> 최근 러닝 1개
+//   인사 -> 레벨 카드 -> 누적 기록 -> 네모 카드(게임 플레잉/내 캐릭터/AI 평가/랭킹) -> 최근 러닝 1개
 //   화면 맨 아래에는 "러닝 시작" 버튼이 항상 고정되어 있습니다.
 // ============================================================
 class MainScreen extends StatefulWidget {
@@ -99,6 +100,9 @@ class _MainScreenState extends State<MainScreen> {
           );
         }
 
+        // 캐릭터(남/여)를 아직 고르지 않았으면 홈 대신 고르는 화면을 한 번 보여줍니다.
+        if (user.look == null) return CharacterPickScreen(userId: _userId);
+
         return Scaffold(
           body: SafeArea(
             bottom: false,
@@ -123,8 +127,7 @@ class _MainScreenState extends State<MainScreen> {
                   user: user,
                   weekInsight: _weekInsight,
                   onPvp: () => _open(PvpScreen(userId: _userId, user: user)),
-                  onCharacter: () =>
-                      _open(ProfileScreen(userId: _userId, userData: user)),
+                  onCharacter: () => _open(ProfileScreen(userId: _userId)),
                   onAiReport: () => _open(AiReportScreen(userId: _userId)),
                   onRanking: () =>
                       _open(RankingScreen(userId: _userId, user: user)),

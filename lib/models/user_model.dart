@@ -1,3 +1,4 @@
+import '../game/character_outfit.dart';
 import '../game/run_rules.dart';
 
 // Firestore의 users/{userId} 문서 한 개를 나타내는 유저 데이터
@@ -20,6 +21,10 @@ class UserModel {
   // 러닝 화면에서 ⇄로 코스 러닝으로 바꾸면 켜지고, 다시 러닝으로 바꾸면 꺼집니다.
   // 한 번 바꾸면 그 쪽으로 고정되어서, 매번 ⇄를 누르지 않아도 됩니다.
   final bool prefersCourseRun;
+
+  // 캐릭터 모습(남/여). 처음 들어올 때 한 번 고르고, 그 뒤로는 바꿀 수 없습니다.
+  // null이면 아직 고르지 않은 것입니다. (홈 대신 고르는 화면을 띄웁니다)
+  final CharacterLook? look;
   final int level;
   final int exp; // 현재 레벨에서 쌓인 경험치 (레벨업하면 초과분만 남음)
   final int gold;
@@ -39,6 +44,7 @@ class UserModel {
     required this.isGuest,
     required this.trashEnabled,
     this.prefersCourseRun = false,
+    this.look,
     required this.level,
     required this.exp,
     required this.gold,
@@ -81,6 +87,7 @@ class UserModel {
       isGuest: map['isGuest'] as bool? ?? false,
       trashEnabled: map['trashEnabled'] as bool? ?? false,
       prefersCourseRun: map['prefersCourseRun'] as bool? ?? false,
+      look: CharacterLook.tryParse(map['look']),
       level: (map['level'] as num?)?.toInt() ?? 1,
       exp: (map['exp'] as num?)?.toInt() ?? 0,
       gold: (map['gold'] as num?)?.toInt() ?? 0,
@@ -109,6 +116,7 @@ class UserModel {
       'isGuest': isGuest,
       'trashEnabled': trashEnabled,
       'prefersCourseRun': prefersCourseRun,
+      if (look != null) 'look': look!.id,
       'level': level,
       'exp': exp,
       'gold': gold,

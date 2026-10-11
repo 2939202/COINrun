@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../game/character_outfit.dart';
 import '../models/ranking_entry.dart';
 import '../models/user_model.dart';
 
@@ -65,17 +66,15 @@ class RankingRepository {
   // 러닝을 저장할 때, 로그인할 때, 닉네임을 바꿀 때 부릅니다.
   // users 문서가 진짜이고 이쪽은 보여주기용 복사본이라, 늦게 반영돼도 큰 문제는 없습니다.
   Future<void> publish(String userId, UserModel user) {
-    return _board
-        .doc(userId)
-        .set(
-          entryData(
-            nickname: user.nickname,
-            level: user.level,
-            totalDistance: user.totalDistance,
-            totalExp: user.totalExp,
-          ),
-          SetOptions(merge: true),
-        );
+    return _board.doc(userId).set({
+      ...entryData(
+        nickname: user.nickname,
+        level: user.level,
+        totalDistance: user.totalDistance,
+        totalExp: user.totalExp,
+      ),
+      ...appearanceData(look: user.look, setId: user.equippedSetId),
+    }, SetOptions(merge: true));
   }
 
   // 러닝을 저장하는 트랜잭션 안에서도 같은 내용을 쓰기 위해 따로 빼두었습니다.
@@ -92,6 +91,14 @@ class RankingRepository {
       'totalExp': totalExp,
       'updatedAt': FieldValue.serverTimestamp(),
     };
+  }
+
+  // 게임 플레잉 대결에서 상대 캐릭터를 그리는 데 쓰는 겉모습 (남/여, 입은 세트)
+  static Map<String, dynamic> appearanceData({
+    required CharacterLook? look,
+    required String? setId,
+  }) {
+    return {if (look != null) 'look': look.id, 'equippedSetId': setId};
   }
 
   DocumentReference<Map<String, dynamic>> entryDoc(String userId) =>

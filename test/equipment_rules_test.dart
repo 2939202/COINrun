@@ -93,7 +93,7 @@ void main() {
     test('입은 세트를 찾아냄', () {
       final user = _user(owned: ['adept'], equipped: 'adept');
       expect(EquipmentRules.equippedSet(user), EquipmentCatalog.adept);
-      expect(EquipmentRules.equippedSetName(user), '중급 모험가 세트');
+      expect(EquipmentRules.equippedSetName(user), '가죽옷');
     });
   });
 

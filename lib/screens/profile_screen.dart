@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../game/character_outfit.dart';
 import '../game/equipment_catalog.dart';
 import '../game/equipment_rules.dart';
 import '../game/honor_level.dart';
@@ -7,11 +8,12 @@ import '../game/run_rules.dart';
 import '../models/equipment_set.dart';
 import '../models/user_model.dart';
 import '../services/course_repository.dart';
+import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/character_view.dart';
 import '../widgets/gold_coin.dart';
 import '../widgets/notched_box.dart';
 import '../widgets/run_app_bar.dart' show GoldColors;
-import '../widgets/runner_figure.dart';
 import '../widgets/segment_bar.dart';
 import 'shop_screen.dart';
 
@@ -21,33 +23,55 @@ import 'shop_screen.dart';
 // 배경은 크림에 점무늬를 깔고, 그 위에 캐릭터를 세웁니다.
 // 아래에는 지금 능력치와, 장비를 사러 가는 길(잡화점)을 둡니다.
 // ============================================================
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   final String userId;
-  final UserModel userData;
 
-  const ProfileScreen({
-    super.key,
-    required this.userId,
-    required this.userData,
-  });
+  const ProfileScreen({super.key, required this.userId});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+// 유저 문서를 계속 지켜봅니다. 잡화점에서 옷을 입고 돌아오면 캐릭터가 바로 갈아입습니다.
+class _ProfileScreenState extends State<ProfileScreen> {
+  late final Stream<UserModel?> _user = UserRepository.instance.watchUser(
+    widget.userId,
+  );
 
   // 아직 사지 않은 세트 중 가장 싼 것 = 다음에 노릴 장비. 다 샀으면 null입니다.
-  EquipmentSet? get _nextSet {
+  static EquipmentSet? _nextSet(UserModel user) {
     for (final set in EquipmentCatalog.all) {
-      if (!userData.owns(set.id)) return set;
+      if (!user.owns(set.id)) return set;
     }
     return null;
   }
 
   @override
   Widget build(BuildContext context) {
+    return StreamBuilder<UserModel?>(
+      stream: _user,
+      builder: (context, snapshot) {
+        final UserModel? user = snapshot.data;
+        if (user == null) {
+          return const Scaffold(
+            backgroundColor: AppColors.creamDeep,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return _build(context, user);
+      },
+    );
+  }
+
+  Widget _build(BuildContext context, UserModel user) {
+    final EquipmentSet? next = _nextSet(user);
     return Scaffold(
       backgroundColor: AppColors.creamDeep,
       appBar: AppBar(
         backgroundColor: AppColors.creamDeep,
         title: const Text('내 캐릭터'),
         actions: [
-          _GoldChip(gold: userData.gold),
+          _GoldChip(gold: user.gold),
           const SizedBox(width: AppSpacing.lg),
         ],
       ),
@@ -55,30 +79,30 @@ class ProfileScreen extends StatelessWidget {
         painter: const _DotPainter(),
         child: SafeArea(
           top: false,
-          child: Column(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.lg,
-                  ),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: AppSpacing.md),
-                      _NamePlate(user: userData),
-                      const SizedBox(height: AppSpacing.sm),
-                      _HonorLine(userId: userId),
-                      const SizedBox(height: AppSpacing.md),
-                      const SizedBox(height: 300, child: RunnerFigure()),
-                      const SizedBox(height: AppSpacing.lg),
-                      _StatsCard(user: userData),
-                    ],
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.sm,
+              AppSpacing.lg,
+              AppSpacing.lg,
+            ),
+            child: Column(
+              children: [
+                _NamePlate(user: user),
+                const SizedBox(height: AppSpacing.sm),
+                _HonorLine(userId: widget.userId),
+                // 캐릭터가 남는 자리를 전부 씁니다.
+                Expanded(
+                  child: CharacterView(
+                    me: CharacterOutfit.partsFor(
+                      user.look ?? CharacterLook.female,
+                      user.equippedSetId,
+                    ),
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Row(
+                _StatsCard(user: user),
+                const SizedBox(height: AppSpacing.md),
+                Row(
                   children: [
                     Expanded(
                       child: NotchedBox(
@@ -90,7 +114,8 @@ class ProfileScreen extends StatelessWidget {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => ShopScreen(userId: userId),
+                            builder: (context) =>
+                                ShopScreen(userId: widget.userId),
                           ),
                         ),
                         child: Column(
@@ -104,9 +129,9 @@ class ProfileScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              _nextSet == null
+                              next == null
                                   ? '전부 갖췄습니다'
-                                  : '다음 단계 · ${_nextSet!.name}',
+                                  : '다음 단계 · ${next.name}',
                               style: Theme.of(context).textTheme.labelMedium
                                   ?.copyWith(color: AppColors.sand),
                               overflow: TextOverflow.ellipsis,
@@ -119,8 +144,8 @@ class ProfileScreen extends StatelessWidget {
                     const Expanded(child: _HouseSlot()),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -161,7 +186,11 @@ class _NamePlate extends StatelessWidget {
   }
 }
 
-// 능력치 카드
+// 능력치 카드 (작게)
+//
+//   장착 · 천옷                         경험치 120 / 300
+//   힘        5   체력      3   속도      0
+//   ━━━━────      ━━──────      ────────
 class _StatsCard extends StatelessWidget {
   final UserModel user;
 
@@ -169,56 +198,56 @@ class _StatsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
     final EquipmentSet? gear = EquipmentRules.equippedSet(user);
     final int needed = RunRules.expToNextLevel(user.level);
 
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm + 2,
+      ),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.black, width: 1.6),
+        border: Border.all(color: AppColors.black, width: 1.4),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text(
-                'RUNNER STATS',
-                style: AppTheme.caption.copyWith(fontSize: 11),
+              Expanded(
+                child: Text(
+                  '장착 · ${EquipmentRules.equippedSetName(user)}',
+                  style: AppTheme.sans.copyWith(
+                    fontSize: 13,
+                    fontWeight: AppTheme.sansMedium,
+                    color: AppColors.black,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
               Text(
-                '장착 · ${EquipmentRules.equippedSetName(user)}',
-                style: textTheme.titleMedium?.copyWith(fontSize: 14),
+                '경험치 ${user.exp} / $needed',
+                style: AppTheme.sans.copyWith(
+                  fontSize: 12,
+                  color: AppColors.label,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.lg),
-
-          _StatRow(label: '힘', value: gear?.power ?? 0),
-          const SizedBox(height: AppSpacing.md),
-          _StatRow(label: '체력', value: gear?.stamina ?? 0),
-          const SizedBox(height: AppSpacing.md),
-          _StatRow(label: '속도', value: gear?.speed ?? 0),
-
-          const SizedBox(height: AppSpacing.lg),
-          const Divider(color: AppColors.sand),
           const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
-              Text('경험치 ', style: textTheme.bodyMedium),
-              Text('${user.exp}', style: textTheme.titleMedium),
-              Text(
-                ' / $needed',
-                style: textTheme.bodyMedium?.copyWith(color: AppColors.mute),
+              Expanded(
+                child: _StatRow(label: '힘', value: gear?.power ?? 0),
               ),
-              const Spacer(),
-              Text(
-                '다음 레벨까지 ${needed - user.exp}',
-                style: textTheme.bodyMedium?.copyWith(color: AppColors.mute),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: _StatRow(label: '체력', value: gear?.stamina ?? 0),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: _StatRow(label: '속도', value: gear?.speed ?? 0),
               ),
             ],
           ),
@@ -239,27 +268,28 @@ class _StatRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 44,
-          child: Text(label, style: Theme.of(context).textTheme.titleMedium),
+        Row(
+          children: [
+            Text(
+              label,
+              style: AppTheme.sans.copyWith(
+                fontSize: 12,
+                color: AppColors.label,
+              ),
+            ),
+            const Spacer(),
+            Text('$value', style: AppTheme.number.copyWith(fontSize: 14)),
+          ],
         ),
-        Expanded(
-          child: SegmentBar(
-            progress: value / max,
-            filledColor: AppColors.black,
-            emptyColor: AppColors.cream,
-            height: 12,
-          ),
-        ),
-        SizedBox(
-          width: 34,
-          child: Text(
-            '$value',
-            textAlign: TextAlign.right,
-            style: AppTheme.number.copyWith(fontSize: 18),
-          ),
+        const SizedBox(height: 3),
+        SegmentBar(
+          progress: value / max,
+          filledColor: AppColors.black,
+          emptyColor: AppColors.cream,
+          height: 6,
         ),
       ],
     );

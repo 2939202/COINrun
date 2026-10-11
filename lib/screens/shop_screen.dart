@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../game/character_outfit.dart';
 import '../game/equipment_catalog.dart';
 import '../game/equipment_rules.dart';
 import '../models/equipment_set.dart';
@@ -199,7 +200,12 @@ class _SetCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _TierIcon(roman: _roman[tier]),
+              _OutfitIcon(
+                asset: CharacterOutfit.iconFor(
+                  user.look ?? CharacterLook.female,
+                  set.id,
+                ),
+              ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
@@ -335,10 +341,11 @@ class _SetCard extends StatelessWidget {
   }
 }
 
-class _TierIcon extends StatelessWidget {
-  final String roman;
+// 옷 아이콘. 3D 캐릭터가 그 옷을 입은 모습을 찍어 둔 그림입니다. (assets/icons/)
+class _OutfitIcon extends StatelessWidget {
+  final String asset;
 
-  const _TierIcon({required this.roman});
+  const _OutfitIcon({required this.asset});
 
   @override
   Widget build(BuildContext context) {
@@ -349,13 +356,14 @@ class _TierIcon extends StatelessWidget {
         color: AppColors.cream,
         borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.checkroom, size: 26),
-          const SizedBox(height: 2),
-          Text(roman, style: AppTheme.number.copyWith(fontSize: 12)),
-        ],
+      padding: const EdgeInsets.all(4),
+      // 픽셀 그림이라 키울 때 번지지 않게 가장 가까운 칸 그대로 씁니다.
+      child: Image.asset(
+        asset,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.none,
+        errorBuilder: (context, error, stack) =>
+            const Icon(Icons.checkroom, size: 26),
       ),
     );
   }

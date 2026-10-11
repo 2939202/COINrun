@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../game/character_outfit.dart';
 import '../game/equipment_rules.dart';
 import '../game/pvp_battle.dart';
 import '../game/run_insights.dart';
@@ -9,11 +10,11 @@ import '../models/user_model.dart';
 import '../services/ranking_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
+import 'character_view.dart';
 import 'gold_coin.dart';
 import 'notched_box.dart';
 import 'segment_bar.dart';
 import 'run_app_bar.dart' show GoldColors;
-import 'runner_figure.dart';
 
 // ============================================================
 // 홈 화면을 이루는 조각들
@@ -451,11 +452,11 @@ class DoubleRule extends StatelessWidget {
 
 // 홈 가운데의 네모 카드들. 옆으로 넘겨 봅니다.
 //
-//   [롤 플레잉] [내 캐릭터] [AI 평가] [랭킹]
+//   [게임 플레잉] [내 캐릭터] [AI 평가] [랭킹]
 //
 // 화면에는 언제나 두 장이 꽉 차게 보이고, 한 번 밀면 한 장씩 넘어갑니다.
 // 처음에는 내 캐릭터와 AI 평가가 보입니다. 랭킹은 오른쪽으로 한 번,
-// 롤 플레잉은 왼쪽으로 한 번 넘겨야 보입니다.
+// 게임 플레잉은 왼쪽으로 한 번 넘겨야 보입니다.
 class ShortcutsCarousel extends StatefulWidget {
   final UserModel user;
   final Stream<InsightReport> weekInsight;
@@ -478,7 +479,7 @@ class ShortcutsCarousel extends StatefulWidget {
   static const double height = 150;
   static const int cardCount = 4;
 
-  // 처음 화면 왼쪽에 오는 카드 (0: 롤 플레잉, 1: 내 캐릭터)
+  // 처음 화면 왼쪽에 오는 카드 (0: 게임 플레잉, 1: 내 캐릭터)
   static const int firstPage = 1;
 
   @override
@@ -603,13 +604,21 @@ class RunnerCard extends StatelessWidget {
         decoration: _shortcutDecoration(AppColors.cream),
         child: Stack(
           children: [
-            // 캐릭터는 오른쪽 아래에 붙여서 얼굴만 나오게 잘립니다.
+            // 오른쪽 아래에 3D 캐릭터 얼굴. 누르면 카드가 눌리도록 손가락은 넘깁니다.
             Positioned(
-              right: -44,
-              bottom: -205,
-              width: 170,
-              height: 300,
-              child: const RunnerFigure(showGround: false),
+              right: 0,
+              bottom: 0,
+              width: 112,
+              height: 112,
+              child: IgnorePointer(
+                child: CharacterView(
+                  me: CharacterOutfit.partsFor(
+                    user.look ?? CharacterLook.female,
+                    user.equippedSetId,
+                  ),
+                  face: true,
+                ),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.all(AppSpacing.md - 2),
@@ -742,7 +751,7 @@ class RankingCardState extends State<RankingCard> {
   }
 }
 
-// 롤 플레잉(PVP) 카드. 검은 바탕에 겨루는 사람 무늬
+// 게임 플레잉(PVP) 카드. 검은 바탕에 겨루는 사람 무늬
 class PvpCard extends StatelessWidget {
   final UserModel user;
   final VoidCallback onTap;
@@ -780,14 +789,14 @@ class PvpCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'ROLE PLAYING',
+                    'GAME PLAYING',
                     style: _shortcutCaption.copyWith(
                       color: AppColors.accentOnDark,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    '롤 플레잉',
+                    '게임 플레잉',
                     style: _shortcutTitle.copyWith(color: AppColors.white),
                   ),
                   const SizedBox(height: AppSpacing.xs),

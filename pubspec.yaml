@@ -30,7 +30,7 @@ dependencies:
   firebase_core: ^4.15.0
   cloud_firestore: ^6.10.0
   firebase_auth: ^6.7.0
-  model_viewer_plus: ^1.10.0
+  webview_flutter: ^4.14.1 # 3D 캐릭터 뷰어 (widgets/character_view.dart)
   pedometer: ^4.2.0
   permission_handler: ^12.0.1
   flutter_compass: ^0.8.1
@@ -47,6 +47,8 @@ dev_dependencies:
 flutter:
   assets:
     - assets/models/ # 캐릭터 3D 모델
+    - assets/viewer/ # 3D 캐릭터 뷰어 (three.js r160, MIT)
+    - assets/icons/ # 잡화점 옷 아이콘 (3D 모델로 찍은 그림)
     - assets/character/ # 캐릭터 2D 이미지
     - assets/geo/ # 서울 구 경계선 (지금 위치의 구 찾기)
   uses-material-design: true
