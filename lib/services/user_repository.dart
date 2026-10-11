@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 
@@ -260,20 +262,16 @@ class UserRepository {
         .catchError((Object error) => debugPrint('러닝 방식 저장 실패: $error'));
   }
 
-  // 처음 들어올 때 고른 캐릭터 모습(남/여)을 저장합니다. (UserModel.look)
-  // 한 번 정하면 바꿀 수 없습니다. 이미 정해져 있으면 그대로 둡니다.
-  // (firestore.rules도 바뀌는 것을 막습니다)
-  Future<void> chooseLook(String userId, CharacterLook look) async {
+  // 캐릭터 모습(남/여)을 저장합니다. (UserModel.look) 내 캐릭터 화면에서 바꿉니다.
+  Future<void> setLook(String userId, CharacterLook look) async {
     final userDoc = _userDoc(userId);
     final UserModel? user = await _firestore.runTransaction((
       transaction,
     ) async {
       final snapshot = await transaction.get(userDoc);
       if (!snapshot.exists) return null;
-      final UserModel current = UserModel.fromMap(snapshot.data()!);
-      if (current.look != null) return null;
       transaction.set(userDoc, {'look': look.id}, SetOptions(merge: true));
-      return current;
+      return UserModel.fromMap(snapshot.data()!);
     });
     // 대결 상대 목록에도 겉모습을 올립니다. 게스트는 랭킹에 없으므로 건너뜁니다.
     if (user != null && !user.isGuest) {
@@ -287,6 +285,42 @@ class UserRepository {
             SetOptions(merge: true),
           );
     }
+  }
+
+  // 시연용: 레벨 10, 골드 30,000으로 맞춥니다. (홈의 골드를 빠르게 6번)
+  // 누적 경험치는 레벨 10에 맞는 값보다 낮을 때만 올려서, 레벨 랭킹이 거꾸로 가지 않게 합니다.
+  static const int demoLevel = 10;
+  static const int demoGold = 30000;
+
+  Future<void> grantDemo(String userId) async {
+    final userDoc = _userDoc(userId);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(userDoc);
+      if (!snapshot.exists) return;
+      final UserModel user = UserModel.fromMap(snapshot.data()!);
+      final int totalExp = max(
+        user.totalExp,
+        RunRules.totalExpFor(demoLevel, 0),
+      );
+      transaction.set(userDoc, {
+        'level': demoLevel,
+        'exp': 0,
+        'gold': demoGold,
+        'totalExp': totalExp,
+      }, SetOptions(merge: true));
+      if (!user.isGuest) {
+        transaction.set(
+          RankingRepository.instance.entryDoc(userId),
+          RankingRepository.entryData(
+            nickname: user.nickname,
+            level: demoLevel,
+            totalDistance: user.totalDistance,
+            totalExp: totalExp,
+          ),
+          SetOptions(merge: true),
+        );
+      }
+    });
   }
 
   // 목록에서만 감춥니다. 통계와 보상은 그대로 둡니다.

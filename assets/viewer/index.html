@@ -36,9 +36,10 @@
 //
 // 앱 → 뷰어:  setFighters(['head',...], ['womanHEAD',...] 또는 null)
 //             strike(true=내가 침, landed=맞았는지)
+// 손가락:     내 캐릭터 화면에서 가로로 끌면 돌고, 빠르게 두 번 치면 붉어지며 콩콩 뜁니다.
 // 뷰어 → 앱:  Flutter.postMessage('ready' | 'error:...')
 //
-// 때리기·맞기는 뼈대 없이 캐릭터 전체를 움직여서 만듭니다. 발바닥이 기준점입니다.
+// 숨쉬기·때리기·맞기는 뼈대 없이 캐릭터 전체를 움직여서 만듭니다. 발바닥이 기준점입니다.
 // ============================================================
 import * as THREE from 'three';
 import { GLTFLoader } from './GLTFLoader.js';
@@ -72,7 +73,7 @@ scene.add(rim);
 // 2) 그 그림을 가장 가까운 칸 그대로(Nearest) 화면 크기로 키웁니다.
 // 3) 키우면서 색 단계를 줄이고, 칸마다 노이즈를 1초에 12번 바꿔 얹습니다.
 //    노이즈는 캐릭터가 있는 칸에만 얹어서 배경은 깨끗합니다.
-const PIXEL = FACE_ONLY ? 2 : 3;
+const PIXEL = 2;
 const low = new THREE.WebGLRenderTarget(1, 1, {
   minFilter: THREE.NearestFilter,
   magFilter: THREE.NearestFilter,
@@ -129,7 +130,8 @@ class Figure {
     this.stand.add(this.rig);
     scene.add(this.stand);
     this.height = 1;
-    this.action = null; // { name: 'attack' | 'hit' | 'dodge', start }
+    this.action = null; // { name: 'attack' | 'hit' | 'dodge' | 'poke', start }
+    this.breath = Math.random() * 3; // 두 사람이 똑같이 숨 쉬지 않게 시작점을 엇갈립니다.
   }
 
   setOutfit(names) {
@@ -166,7 +168,9 @@ class Figure {
 
   update(t) {
     const H = this.height;
-    const p = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, sy: 1 };
+    // 가만히 있을 때도 숨을 쉽니다. (2.8초에 한 번, 키가 1%쯤 늘었다 줄었다)
+    const breathe = Math.sin((t + this.breath) * Math.PI * 2 / 2.8);
+    const p = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0.008 * breathe, sy: 1 + 0.011 * breathe };
     let flash = 0;
     const a = this.action;
     const u = a ? t - a.start : -1;
@@ -178,23 +182,30 @@ class Figure {
         p.rx = -0.18 * windup + 0.32 * lunge;
         p.ry = -0.35 * windup + 0.25 * lunge;
         p.z = -0.03 * H * windup + 0.3 * H * lunge;
-        p.sy = 1 + 0.04 * lunge;
+        p.sy *= 1 + 0.04 * lunge;
       } else if (a.name === 'hit') {
         // 뒤로 밀리면서 흔들리고 붉게 번쩍
         const knock = u < 0.1 ? ease(u / 0.1) : 1 - ease((u - 0.1) / 0.5);
         p.z = -0.12 * H * knock;
         p.rx = -0.22 * knock;
-        p.rz = 0.12 * knock;
+        p.rz += 0.12 * knock;
         p.x = 0.02 * H * Math.sin(u * 70) * Math.max(0, 1 - u / 0.4);
-        p.sy = 1 - 0.05 * knock;
+        p.sy *= 1 - 0.05 * knock;
         flash = Math.max(0, 1 - u / 0.35);
+      } else if (a.name === 'poke') {
+        // 두 번 톡: 붉게 번쩍이고 제자리에서 콩콩 세 번 뜁니다. (약 1초)
+        const hops = Math.abs(Math.sin(Math.PI * 3 * u / 0.95));
+        p.y = 0.09 * H * hops * Math.max(0, 1 - u / 1.1);
+        p.sy *= 1 - 0.05 * (1 - hops) * (u < 0.95 ? 1 : 0);
+        p.rz += 0.06 * Math.sin(Math.PI * 3 * u / 0.95);
+        flash = Math.max(0, 1 - u / 0.5);
       } else {
         // 피하기: 옆으로 쏙 빠졌다 돌아오기
         const side = u < 0.15 ? ease(u / 0.15) : 1 - ease((u - 0.15) / 0.35);
         p.x = 0.18 * H * side;
         p.rz = -0.12 * side;
       }
-      if (u > 0.6) this.action = null;
+      if (u > (a.name === 'poke' ? 1.0 : 0.6)) this.action = null;
     }
     this.rig.position.set(p.x, p.y, p.z);
     this.rig.rotation.set(p.rx, p.ry, p.rz);
@@ -267,10 +278,10 @@ function layout() {
   const fov = THREE.MathUtils.degToRad(camera.fov);
   if (FACE_ONLY) {
     // 머리(키의 위쪽 40% 정도)만 화면에 차게
-    const fit = Math.max(H * 0.48, (H * 0.48) / camera.aspect);
+    const fit = Math.max(H * 0.56, (H * 0.56) / camera.aspect);
     const distance = fit / (2 * Math.tan(fov / 2));
-    camera.position.set(0, H * 0.78, distance);
-    camera.lookAt(0, H * 0.77, 0);
+    camera.position.set(0, H * 0.75, distance);
+    camera.lookAt(0, H * 0.74, 0);
   } else {
     // 머리부터 발까지 들어오고 위아래로 조금 여유가 남는 거리
     const wide = foe ? gap * 2 + H * 0.7 : H * 0.9;
@@ -285,7 +296,20 @@ window.addEventListener('resize', layout);
 
 // ---------- 손가락으로 돌리기 (내 캐릭터 화면, 가로로만) ----------
 let dragX = null, spin = 0;
-renderer.domElement.addEventListener('pointerdown', (e) => { dragX = e.clientX; spin = 0; });
+let lastTap = 0, tapX = 0;
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  dragX = e.clientX;
+  spin = 0;
+  // 0.3초 안에 같은 자리를 두 번 치면 콩콩
+  const now = performance.now();
+  if (!foe && me && now - lastTap < 300 && Math.abs(e.clientX - tapX) < 30) {
+    me.play('poke');
+    lastTap = 0;
+  } else {
+    lastTap = now;
+    tapX = e.clientX;
+  }
+});
 window.addEventListener('pointermove', (e) => {
   if (dragX === null) return;
   spin = (e.clientX - dragX) * 0.012;

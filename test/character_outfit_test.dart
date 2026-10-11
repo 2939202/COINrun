@@ -73,6 +73,23 @@ void main() {
     }
   });
 
+  test('홈 카드 얼굴 그림이 모든 모습과 옷에 있습니다', () {
+    for (final look in CharacterLook.values) {
+      for (final setId in [
+        null,
+        'unknown',
+        ...EquipmentCatalog.all.map((s) => s.id),
+      ]) {
+        final String path = CharacterOutfit.faceFor(look, setId);
+        expect(File(path).existsSync(), isTrue, reason: path);
+      }
+    }
+    expect(
+      CharacterOutfit.faceFor(CharacterLook.male, null),
+      'assets/icons/face_male_basic.png',
+    );
+  });
+
   group('UserModel.look', () {
     test('저장한 모습을 그대로 읽습니다', () {
       final map = UserModel.initial('a', isGuest: false).toMap()

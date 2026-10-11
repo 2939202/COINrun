@@ -172,6 +172,36 @@ $toneRules
   }
 
   // ----------------------------------------------------------
+  // 답장 기억 (AI 평가 화면의 "알겠습니다." / "고마워요!")
+  //
+  // 평가를 끝까지 읽고 답했으면 그 평가의 열쇠를 users/{uid}/insights/replies에
+  // 적어 둡니다. 같은 평가를 다시 열면 답장 없이 한꺼번에 보여줍니다.
+  // ----------------------------------------------------------
+  DocumentReference<Map<String, dynamic>> _repliesDoc(String userId) =>
+      _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('insights')
+          .doc('replies');
+
+  // 못 읽으면 답한 것으로 봅니다. (답장 버튼이 막혀 평가를 못 보는 일이 없게)
+  Future<bool> wasReplied(String userId, InsightRange range, String key) async {
+    try {
+      final snapshot = await _repliesDoc(userId).get();
+      return snapshot.data()?[range.name] == key;
+    } catch (error) {
+      debugPrint('답장 기록 읽기 실패: $error');
+      return true;
+    }
+  }
+
+  void markReplied(String userId, InsightRange range, String key) {
+    _repliesDoc(userId)
+        .set({range.name: key}, SetOptions(merge: true))
+        .catchError((Object error) => debugPrint('답장 기록 저장 실패: $error'));
+  }
+
+  // ----------------------------------------------------------
   // 아래는 화면/네트워크와 상관없는 부분이라 테스트로 확인합니다.
   // ----------------------------------------------------------
 
@@ -225,6 +255,19 @@ $toneRules
           ':${p.runs}:${p.km.toStringAsFixed(2)}:${p.movingSeconds}',
     report.score,
   ].join('|');
+
+  // 평가 문장이 같으면 같은 열쇠. 앱을 다시 켜도 같도록 직접 계산합니다. (FNV-1a)
+  static String replyKey(InsightReport report) {
+    final String text = [
+      report.headline,
+      for (final comment in report.comments) comment.text,
+    ].join('\n');
+    int hash = 0x811c9dc5;
+    for (final int unit in text.codeUnits) {
+      hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
+    }
+    return hash.toRadixString(16);
+  }
 
   // Gemini 답 -> 문장. 형식이 틀리면 null (화면은 규칙 문장을 씁니다)
   //

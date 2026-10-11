@@ -37,6 +37,7 @@ class AppColors {
 
   static const Color cream = Color(0xFFF5EDE0); // 카드 배경
   static const Color creamDeep = Color(0xFFF1E8D7); // 캐릭터/잡화점 같은 화면 배경
+  static const Color shopFloor = Color(0xFFDDCDB0); // 잡화점 바탕 (한 톤 어둡게)
   static const Color sand = Color(0xFFDBD6C0); // 구분선, 진행바 바닥
   static const Color mute = Color(0xFF8B8175); // 보조 글자
   static const Color label = Color(0xFF91857C); // 큰 숫자 아래 이름 (총 킬로미터 ...)

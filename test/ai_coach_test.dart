@@ -61,6 +61,26 @@ void main() {
     });
   });
 
+  group('답장 기억 열쇠', () {
+    test('같은 평가면 같은 열쇠, 문장이 바뀌면 다른 열쇠', () {
+      final InsightReport base = _report();
+      expect(AiCoach.replyKey(base), AiCoach.replyKey(_report()));
+      final InsightReport worded = base.withWords(
+        headline: '이번 주는 4.0km를 기록하였습니다.',
+        comments: base.comments,
+      );
+      expect(AiCoach.replyKey(worded), isNot(AiCoach.replyKey(base)));
+    });
+
+    test('앱을 다시 켜도 같은 값이 나오도록 직접 계산합니다 (FNV-1a)', () {
+      final InsightReport report = _report().withWords(
+        headline: 'a',
+        comments: const [],
+      );
+      expect(AiCoach.replyKey(report), 'e40c292c');
+    });
+  });
+
   group('Gemini 답 읽기', () {
     String answer(Map<String, Object> map) => jsonEncode(map);
 

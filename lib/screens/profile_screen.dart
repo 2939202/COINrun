@@ -13,15 +13,23 @@ import '../theme/app_theme.dart';
 import '../widgets/character_view.dart';
 import '../widgets/gold_coin.dart';
 import '../widgets/notched_box.dart';
-import '../widgets/run_app_bar.dart' show GoldColors;
-import '../widgets/segment_bar.dart';
 import 'shop_screen.dart';
 
 // ============================================================
 // 내 캐릭터
 //
-// 배경은 크림에 점무늬를 깔고, 그 위에 캐릭터를 세웁니다.
-// 아래에는 지금 능력치와, 장비를 사러 가는 길(잡화점)을 둡니다.
+// 흰 바탕 전체에 3D 캐릭터를 세우고, 그 위에 작은 것들을 얹습니다.
+//
+//   [여자|남자]          LV.10 · BRONZE          (i)
+//                          닉네임                힘    3
+//                                                체력  3
+//               (3D 캐릭터, 숨 쉬는 중)           속도  2
+//                                                명예  Lv.1
+//   [잡화점 (반투명)]           [나의 집 · 길드 (반투명)]
+//
+// (i)를 누르면 오른쪽 능력치가 열리고 닫힙니다.
+// 캐릭터는 가로로 끌면 돌고, 빠르게 두 번 치면 붉어지며 콩콩 뜁니다.
+// 남/여를 아직 고르지 않은 사람에게는 물음표를 보여줍니다.
 // ============================================================
 class ProfileScreen extends StatefulWidget {
   final String userId;
@@ -37,6 +45,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late final Stream<UserModel?> _user = UserRepository.instance.watchUser(
     widget.userId,
   );
+  late final Stream<HonorLevel> _honor = CourseRepository.instance.watchHonor(
+    widget.userId,
+  );
+
+  bool _showStats = false;
+
+  // 고르자마자 바뀌어 보이게 저장이 끝나기 전 값을 잠깐 들고 있습니다.
+  CharacterLook? _pending;
 
   // 아직 사지 않은 세트 중 가장 싼 것 = 다음에 노릴 장비. 다 샀으면 null입니다.
   static EquipmentSet? _nextSet(UserModel user) {
@@ -44,6 +60,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (!user.owns(set.id)) return set;
     }
     return null;
+  }
+
+  Future<void> _pickLook(CharacterLook look) async {
+    setState(() => _pending = look);
+    try {
+      await UserRepository.instance.setLook(widget.userId, look);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _pending = null);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('저장하지 못했어요. 다시 눌러 주세요.')));
+    }
   }
 
   @override
@@ -54,106 +83,164 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final UserModel? user = snapshot.data;
         if (user == null) {
           return const Scaffold(
-            backgroundColor: AppColors.creamDeep,
+            backgroundColor: AppColors.white,
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        return _build(context, user);
+        if (_pending != null && _pending == user.look) _pending = null;
+        return _build(context, user, _pending ?? user.look);
       },
     );
   }
 
-  Widget _build(BuildContext context, UserModel user) {
+  Widget _build(BuildContext context, UserModel user, CharacterLook? look) {
     final EquipmentSet? next = _nextSet(user);
     return Scaffold(
-      backgroundColor: AppColors.creamDeep,
+      backgroundColor: AppColors.white,
       appBar: AppBar(
-        backgroundColor: AppColors.creamDeep,
+        backgroundColor: AppColors.white,
         title: const Text('내 캐릭터'),
         actions: [
           _GoldChip(gold: user.gold),
           const SizedBox(width: AppSpacing.lg),
         ],
       ),
-      body: CustomPaint(
-        painter: const _DotPainter(),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              AppSpacing.sm,
-              AppSpacing.lg,
-              AppSpacing.lg,
-            ),
-            child: Column(
-              children: [
-                _NamePlate(user: user),
-                const SizedBox(height: AppSpacing.sm),
-                _HonorLine(userId: widget.userId),
-                // 캐릭터가 남는 자리를 전부 씁니다.
-                Expanded(
-                  child: CharacterView(
-                    me: CharacterOutfit.partsFor(
-                      user.look ?? CharacterLook.female,
-                      user.equippedSetId,
-                    ),
-                  ),
-                ),
-                _StatsCard(user: user),
-                const SizedBox(height: AppSpacing.md),
-                Row(
-                  children: [
-                    Expanded(
-                      child: NotchedBox(
-                        cut: 12,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.md,
-                          vertical: AppSpacing.md - 2,
-                        ),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                ShopScreen(userId: widget.userId),
+      body: SafeArea(
+        top: false,
+        child: Stack(
+          children: [
+            // 캐릭터가 화면 전체를 씁니다. 위아래 상자는 반투명이라 뒤로 비칩니다.
+            Positioned.fill(
+              top: 44,
+              child: look == null
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '?',
+                            style: AppTheme.serifNumber.copyWith(
+                              fontSize: 96,
+                              color: AppColors.sand,
+                            ),
                           ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '잡화점',
-                              style: Theme.of(context).textTheme.titleLarge
-                                  ?.copyWith(color: AppColors.white),
+                          Text(
+                            '왼쪽 위에서 여자나 남자를 골라 주세요',
+                            style: AppTheme.sans.copyWith(
+                              fontSize: 13,
+                              color: AppColors.label,
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              next == null
-                                  ? '전부 갖췄습니다'
-                                  : '다음 단계 · ${next.name}',
-                              style: Theme.of(context).textTheme.labelMedium
-                                  ?.copyWith(color: AppColors.sand),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : CharacterView(
+                      me: CharacterOutfit.partsFor(look, user.equippedSetId),
+                    ),
+            ),
+            Positioned(
+              top: AppSpacing.sm,
+              left: 0,
+              right: 0,
+              child: Center(child: _NamePlate(user: user)),
+            ),
+            Positioned(
+              top: AppSpacing.sm,
+              left: AppSpacing.lg,
+              child: Row(
+                children: [
+                  for (final option in CharacterLook.values)
+                    Padding(
+                      padding: const EdgeInsets.only(right: AppSpacing.xs),
+                      child: _LookChip(
+                        label: option.label,
+                        selected: option == look,
+                        onTap: () => _pickLook(option),
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.md),
-                    const Expanded(child: _HouseSlot()),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+            Positioned(
+              top: 0,
+              right: AppSpacing.sm,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  IconButton(
+                    tooltip: '능력치',
+                    onPressed: () => setState(() => _showStats = !_showStats),
+                    icon: Icon(
+                      _showStats ? Icons.info : Icons.info_outline,
+                      color: AppColors.black,
+                    ),
+                  ),
+                  if (_showStats)
+                    Padding(
+                      padding: const EdgeInsets.only(right: AppSpacing.sm),
+                      child: StreamBuilder<HonorLevel>(
+                        stream: _honor,
+                        builder: (context, honor) =>
+                            _StatsColumn(user: user, honor: honor.data),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: AppSpacing.lg,
+              right: AppSpacing.lg,
+              bottom: AppSpacing.lg,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: NotchedBox(
+                      cut: 12,
+                      color: AppColors.black.withValues(alpha: 0.72),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                        vertical: AppSpacing.md - 2,
+                      ),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              ShopScreen(userId: widget.userId),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '잡화점',
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(color: AppColors.white),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            next == null ? '전부 갖췄습니다' : '다음 단계 · ${next.name}',
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(color: AppColors.sand),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  const Expanded(child: _HouseSlot()),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-// 이름표
+// 이름표: 테두리 없이 작게
 class _NamePlate extends StatelessWidget {
   final UserModel user;
 
@@ -161,136 +248,107 @@ class _NamePlate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.xl,
-        vertical: AppSpacing.sm + 2,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: AppColors.black, width: 1.6),
-      ),
-      child: Column(
-        children: [
-          Text(
-            'LV.${user.level} · ${RunRules.tierName(user.level).split(' ').first.toUpperCase()}',
-            style: AppTheme.caption.copyWith(fontSize: 11),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'LV.${user.level} · ${RunRules.tierName(user.level).split(' ').first.toUpperCase()}',
+          style: AppTheme.caption.copyWith(fontSize: 9.5),
+        ),
+        const SizedBox(height: 1),
+        Text(
+          user.nickname,
+          style: AppTheme.serifNumber.copyWith(
+            fontSize: 17,
+            color: AppColors.black,
           ),
-          const SizedBox(height: 2),
-          Text(user.nickname, style: textTheme.titleLarge),
-        ],
+        ),
+      ],
+    );
+  }
+}
+
+// 남/여 고르기
+class _LookChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _LookChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.black : AppColors.white,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          border: Border.all(color: AppColors.black, width: 1.2),
+        ),
+        child: Text(
+          label,
+          style: AppTheme.sans.copyWith(
+            fontSize: 12,
+            fontWeight: AppTheme.sansMedium,
+            color: selected ? AppColors.white : AppColors.black,
+          ),
+        ),
       ),
     );
   }
 }
 
-// 능력치 카드 (작게)
-//
-//   장착 · 천옷                         경험치 120 / 300
-//   힘        5   체력      3   속도      0
-//   ━━━━────      ━━──────      ────────
-class _StatsCard extends StatelessWidget {
+// 오른쪽 위 능력치. 테두리 없이 세로로: 힘, 체력, 속도, 명예
+class _StatsColumn extends StatelessWidget {
   final UserModel user;
+  final HonorLevel? honor;
 
-  const _StatsCard({required this.user});
+  const _StatsColumn({required this.user, required this.honor});
 
   @override
   Widget build(BuildContext context) {
     final EquipmentSet? gear = EquipmentRules.equippedSet(user);
-    final int needed = RunRules.expToNextLevel(user.level);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm + 2,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.black, width: 1.4),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '장착 · ${EquipmentRules.equippedSetName(user)}',
-                  style: AppTheme.sans.copyWith(
-                    fontSize: 13,
-                    fontWeight: AppTheme.sansMedium,
-                    color: AppColors.black,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Text(
-                '경험치 ${user.exp} / $needed',
-                style: AppTheme.sans.copyWith(
-                  fontSize: 12,
-                  color: AppColors.label,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              Expanded(
-                child: _StatRow(label: '힘', value: gear?.power ?? 0),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: _StatRow(label: '체력', value: gear?.stamina ?? 0),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: _StatRow(label: '속도', value: gear?.speed ?? 0),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatRow extends StatelessWidget {
-  final String label;
-  final int value;
-
-  // 막대가 가득 차는 기준. 고급 세트(15)보다 조금 위로 잡습니다.
-  static const int max = 20;
-
-  const _StatRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
+    final int honorLevel = honor?.level ?? 0;
+    final List<(String, String)> rows = [
+      ('힘', '${gear?.power ?? 0}'),
+      ('체력', '${gear?.stamina ?? 0}'),
+      ('속도', '${gear?.speed ?? 0}'),
+      ('명예', honorLevel == 0 ? '-' : 'Lv.$honorLevel'),
+    ];
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Row(
-          children: [
-            Text(
-              label,
-              style: AppTheme.sans.copyWith(
-                fontSize: 12,
-                color: AppColors.label,
-              ),
+        for (final (label, value) in rows)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: AppTheme.sans.copyWith(
+                    fontSize: 12,
+                    color: AppColors.label,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                SizedBox(
+                  width: 36,
+                  child: Text(
+                    value,
+                    textAlign: TextAlign.right,
+                    style: AppTheme.number.copyWith(fontSize: 15),
+                  ),
+                ),
+              ],
             ),
-            const Spacer(),
-            Text('$value', style: AppTheme.number.copyWith(fontSize: 14)),
-          ],
-        ),
-        const SizedBox(height: 3),
-        SegmentBar(
-          progress: value / max,
-          filledColor: AppColors.black,
-          emptyColor: AppColors.cream,
-          height: 6,
-        ),
+          ),
       ],
     );
   }
@@ -303,6 +361,16 @@ class _HouseSlot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.white.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: _house(textTheme),
+    );
+  }
+
+  Widget _house(TextTheme textTheme) {
     return DashedBox(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
@@ -357,87 +425,6 @@ class _GoldChip extends StatelessWidget {
           Text('$gold', style: AppTheme.number.copyWith(fontSize: 16)),
         ],
       ),
-    );
-  }
-}
-
-// 배경 점무늬
-class _DotPainter extends CustomPainter {
-  const _DotPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = AppColors.sand.withValues(alpha: 0.55);
-    const double step = 16;
-    for (double y = step / 2; y < size.height; y += step) {
-      for (double x = step / 2; x < size.width; x += step) {
-        canvas.drawCircle(Offset(x, y), 1.1, paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DotPainter oldDelegate) => false;
-}
-
-// 이름표 아래 명예 레벨 한 줄. 사설 코스를 만들고 하트를 받으면 오릅니다.
-class _HonorLine extends StatefulWidget {
-  final String userId;
-
-  const _HonorLine({required this.userId});
-
-  @override
-  State<_HonorLine> createState() => _HonorLineState();
-}
-
-class _HonorLineState extends State<_HonorLine> {
-  late final Stream<HonorLevel> _honor = CourseRepository.instance.watchHonor(
-    widget.userId,
-  );
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<HonorLevel>(
-      stream: _honor,
-      builder: (context, snapshot) {
-        final HonorLevel? honor = snapshot.data;
-        if (honor == null) return const SizedBox(height: 18);
-        final TextStyle style = AppTheme.sans.copyWith(
-          fontSize: 12.5,
-          color: AppColors.label,
-        );
-        if (honor.level == 0) {
-          return Text('사설 코스를 만들면 명예 레벨이 오릅니다', style: style);
-        }
-        final int? left = honor.heartsToNext;
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                gradient: GoldColors.metal,
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-                border: Border.all(color: GoldColors.edge),
-              ),
-              child: Text(
-                '명예 Lv.${honor.level}',
-                style: AppTheme.sans.copyWith(
-                  fontSize: 12,
-                  fontWeight: AppTheme.sansMedium,
-                  color: AppColors.black,
-                ),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Text(
-              '코스 ${honor.courses}개 · 하트 ${honor.hearts}'
-              '${left == null ? '' : ' · 다음까지 $left'}',
-              style: style,
-            ),
-          ],
-        );
-      },
     );
   }
 }

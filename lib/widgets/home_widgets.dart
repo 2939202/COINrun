@@ -10,7 +10,6 @@ import '../models/user_model.dart';
 import '../services/ranking_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
-import 'character_view.dart';
 import 'gold_coin.dart';
 import 'notched_box.dart';
 import 'segment_bar.dart';
@@ -28,7 +27,15 @@ class HomeHeader extends StatelessWidget {
   final UserModel user;
   final VoidCallback onSettings;
 
-  const HomeHeader({super.key, required this.user, required this.onSettings});
+  // 골드를 빠르게 6번 누르면 부릅니다. (시연용, main_screen.dart)
+  final VoidCallback? onGoldSecret;
+
+  const HomeHeader({
+    super.key,
+    required this.user,
+    required this.onSettings,
+    this.onGoldSecret,
+  });
 
   // 인사말-이름, 이름-레벨 카드 사이 간격
   static const double nameGap = AppSpacing.md;
@@ -69,7 +76,10 @@ class HomeHeader extends StatelessWidget {
             ],
           ),
         ),
-        GoldPill(gold: user.gold),
+        _SecretTaps(
+          onTriggered: onGoldSecret,
+          child: GoldPill(gold: user.gold),
+        ),
         const SizedBox(width: AppSpacing.sm),
         IconButton(
           tooltip: '설정',
@@ -604,21 +614,28 @@ class RunnerCard extends StatelessWidget {
         decoration: _shortcutDecoration(AppColors.cream),
         child: Stack(
           children: [
-            // 오른쪽 아래에 3D 캐릭터 얼굴. 누르면 카드가 눌리도록 손가락은 넘깁니다.
+            // 오른쪽 아래에 캐릭터 얼굴. 글자와 겹치지 않게 아래 구석에 작게 둡니다.
+            // 아직 남/여를 고르지 않았으면 물음표입니다. (내 캐릭터 화면에서 고릅니다)
             Positioned(
               right: 0,
               bottom: 0,
-              width: 112,
-              height: 112,
-              child: IgnorePointer(
-                child: CharacterView(
-                  me: CharacterOutfit.partsFor(
-                    user.look ?? CharacterLook.female,
-                    user.equippedSetId,
-                  ),
-                  face: true,
-                ),
-              ),
+              width: 84,
+              height: 84,
+              child: user.look == null
+                  ? Center(
+                      child: Text(
+                        '?',
+                        style: AppTheme.serifNumber.copyWith(
+                          fontSize: 44,
+                          color: AppColors.mute,
+                        ),
+                      ),
+                    )
+                  : Image.asset(
+                      CharacterOutfit.faceFor(user.look!, user.equippedSetId),
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.none,
+                    ),
             ),
             Padding(
               padding: const EdgeInsets.all(AppSpacing.md - 2),
@@ -913,6 +930,45 @@ class AiReportCard extends StatelessWidget {
           },
         ),
       ),
+    );
+  }
+}
+
+// 빠르게 여러 번 누르면 한 번 알려줍니다. (사이가 0.5초를 넘으면 처음부터 셉니다)
+class _SecretTaps extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTriggered;
+
+  static const int taps = 6;
+
+  const _SecretTaps({required this.child, required this.onTriggered});
+
+  @override
+  State<_SecretTaps> createState() => _SecretTapsState();
+}
+
+class _SecretTapsState extends State<_SecretTaps> {
+  int _count = 0;
+  DateTime _last = DateTime(0);
+
+  void _tap() {
+    final DateTime now = DateTime.now();
+    _count = now.difference(_last) < const Duration(milliseconds: 500)
+        ? _count + 1
+        : 1;
+    _last = now;
+    if (_count >= _SecretTaps.taps) {
+      _count = 0;
+      widget.onTriggered?.call();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.onTriggered == null ? null : _tap,
+      child: widget.child,
     );
   }
 }

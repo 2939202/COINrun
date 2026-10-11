@@ -31,7 +31,9 @@ class CharacterStrike {
 //   me만 주면     내 캐릭터 화면. 한 명이 가만히 서 있고, 가로로 끌면 돕니다.
 //   foe도 주면    게임 플레잉 대결. 두 명이 마주 보고, strike가 오면 치고 맞습니다.
 //   pair: true    캐릭터 고르기. 두 명이 나란히 앞을 봅니다.
-//   face: true    홈 카드. 얼굴만 크게 보이고, 손가락 조작은 받지 않습니다.
+//
+// 홈 카드의 얼굴은 3D가 아니라, 같은 뷰어(?face=1)로 미리 찍어 둔 그림입니다.
+// (assets/icons/face_*.png) 홈은 자주 열려서 웹뷰를 띄우지 않습니다.
 //
 // 그림체는 픽셀 느낌에 잔잔한 노이즈를 얹은 것입니다. (뷰어의 "필터")
 //
@@ -43,7 +45,6 @@ class CharacterView extends StatefulWidget {
   final List<String>? foe;
   final CharacterStrike? strike;
   final bool pair;
-  final bool face;
 
   const CharacterView({
     super.key,
@@ -51,7 +52,6 @@ class CharacterView extends StatefulWidget {
     this.foe,
     this.strike,
     this.pair = false,
-    this.face = false,
   });
 
   @override
@@ -91,7 +91,6 @@ class _CharacterViewState extends State<CharacterView> {
         'me': widget.me.join(','),
         if (widget.foe != null) 'foe': widget.foe!.join(','),
         if (widget.pair) 'pair': '1',
-        if (widget.face) 'face': '1',
       });
       final WebViewController controller = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -147,10 +146,7 @@ class _CharacterViewState extends State<CharacterView> {
       return Center(
         child: Text(
           '보이지 않아요',
-          style: AppTheme.sans.copyWith(
-            fontSize: widget.face ? 11 : 13,
-            color: AppColors.label,
-          ),
+          style: AppTheme.sans.copyWith(fontSize: 13, color: AppColors.label),
         ),
       );
     }
@@ -165,14 +161,11 @@ class _CharacterViewState extends State<CharacterView> {
             child: WebViewWidget(
               controller: controller,
               // 가로로 끌면 캐릭터가 돌고, 세로로 끌면 화면이 스크롤됩니다.
-              // 얼굴 카드는 넘기는 카드 안에 있어서 손가락을 받지 않습니다.
-              gestureRecognizers: widget.face
-                  ? const {}
-                  : {
-                      Factory<HorizontalDragGestureRecognizer>(
-                        HorizontalDragGestureRecognizer.new,
-                      ),
-                    },
+              gestureRecognizers: {
+                Factory<HorizontalDragGestureRecognizer>(
+                  HorizontalDragGestureRecognizer.new,
+                ),
+              },
             ),
           ),
         if (!_ready)

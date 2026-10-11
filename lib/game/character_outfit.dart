@@ -59,6 +59,13 @@ class CharacterOutfit {
   static String iconFor(CharacterLook look, String setId) =>
       'assets/icons/outfit_${look.id}_$setId.png';
 
+  // 홈 "내 캐릭터" 카드의 얼굴 그림. 3D 모델로 찍어 둔 그림입니다. (assets/icons/)
+  // 홈은 자주 열려서 3D(웹뷰)를 띄우지 않고 그림을 씁니다. 모르는 세트면 기본 옷입니다.
+  static String faceFor(CharacterLook look, String? setId) {
+    final String outfit = clothesForSet.containsKey(setId) ? setId! : 'basic';
+    return 'assets/icons/face_${look.id}_$outfit.png';
+  }
+
   // 이 모습과 장비로 켜야 할 파츠. 모르는 세트면 장비 없음으로 봅니다.
   static List<String> partsFor(CharacterLook look, String? setId) {
     final String head = look == CharacterLook.male ? 'head' : 'womanHEAD';

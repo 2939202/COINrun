@@ -56,8 +56,11 @@ class _ShopScreenState extends State<ShopScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 다른 화면보다 한 톤 어두운 바탕이라 가게 안에 들어온 느낌이 납니다.
     return Scaffold(
+      backgroundColor: AppColors.shopFloor,
       appBar: AppBar(
+        backgroundColor: AppColors.shopFloor,
         title: const Text('잡화점'),
         actions: [
           StreamBuilder<UserModel?>(
@@ -260,17 +263,6 @@ class _SetCard extends StatelessWidget {
               _StatChip(label: '체력', value: set.stamina),
               const SizedBox(width: AppSpacing.sm - 2),
               _StatChip(label: '속도', value: set.speed),
-              const Spacer(),
-              Flexible(
-                child: Text(
-                  '골드·경험치 +${set.power}%',
-                  style: textTheme.titleMedium?.copyWith(
-                    color: AppColors.accent,
-                    fontSize: 13,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),

@@ -10,7 +10,6 @@ import '../theme/ai_palette.dart';
 import '../theme/app_theme.dart';
 import '../widgets/notched_box.dart';
 import '../widgets/segment_bar.dart';
-import '../widgets/week_goal_card.dart';
 import '../utils/formatters.dart';
 
 // ============================================================
@@ -140,12 +139,9 @@ class _InsightTabState extends State<_InsightTab>
         return StreamBuilder<List<RunLog>>(
           stream: _monthRuns,
           builder: (context, runs) => InsightTabBody(
+            userId: widget.userId,
             report: report,
             calendar: RunCalendar.of(DateTime.now(), runs.data ?? const []),
-            // 주간 탭: 이번 주 목표 (훈련 부하 모델 -> 목표 범위 -> AI 비서)
-            goal: widget.range.isWeek
-                ? WeekGoalSection(userId: widget.userId)
-                : null,
           ),
         );
       },
@@ -153,18 +149,18 @@ class _InsightTabState extends State<_InsightTab>
   }
 }
 
-// 탭 한 장의 내용. 위에서부터 리포트 카드 -> AI 비서 말풍선 -> (이번 주 목표)
-// -> 지난번과 비교 -> 최근 거리 막대. 불러오기와 떼어 두어 그대로 그려볼 수 있습니다.
+// 탭 한 장의 내용. 위에서부터 리포트 카드 -> AI 비서 말풍선 -> 지난번과 비교
+// -> 최근 거리 막대. 불러오기와 떼어 두어 그대로 그려볼 수 있습니다.
 class InsightTabBody extends StatelessWidget {
+  final String userId;
   final InsightReport report;
   final RunCalendar calendar;
-  final Widget? goal;
 
   const InsightTabBody({
     super.key,
+    required this.userId,
     required this.report,
     required this.calendar,
-    this.goal,
   });
 
   @override
@@ -174,9 +170,8 @@ class InsightTabBody extends StatelessWidget {
       children: [
         InsightScoreCard(report: report, calendar: calendar),
         const SizedBox(height: AppSpacing.xl),
-        AiAdvisorSection(report: report),
+        AiAdvisorSection(userId: userId, report: report),
         const SizedBox(height: AppSpacing.xl),
-        if (goal != null) ...[goal!, const SizedBox(height: AppSpacing.xl)],
         _CompareRow(report: report),
         const SizedBox(height: AppSpacing.xl),
         _DistanceBars(report: report),
@@ -775,17 +770,87 @@ class _DayCell extends StatelessWidget {
 }
 
 // AI 비서 영역: 왼쪽에 "AI" 표시, 오른쪽에 말풍선이 차례로 쌓입니다.
-//   첫 말풍선(검정) - 한 줄 평
-//   다음 말풍선(크림) - 조언. 앞에 작은 표시로 잘한 점 / 주의 / 참고를 나눕니다.
-class AiAdvisorSection extends StatelessWidget {
+//
+//   (AI)  [한 줄 평]                       <- 늘 보입니다
+//         더보기 ▾                         <- 처음엔 접혀 있습니다
+//         [▼ 아쉬운 점 ...]
+//                          [알겠습니다.]   <- 내 답장 (오른쪽)
+//         [▲ 잘한 점 ...]
+//                           [고마워요!]
+//
+// 평가가 새로 나왔을 때만 하나씩 보여주고 답장을 받습니다. 끝까지 답하면 기억해 두고,
+// 다음부터 같은 평가는 답장 없이 한꺼번에 보여줍니다. (AiCoach.repliedKey)
+class AiAdvisorSection extends StatefulWidget {
+  final String userId;
   final InsightReport report;
 
-  const AiAdvisorSection({super.key, required this.report});
+  const AiAdvisorSection({
+    super.key,
+    required this.userId,
+    required this.report,
+  });
+
+  @override
+  State<AiAdvisorSection> createState() => _AiAdvisorSectionState();
+}
+
+class _AiAdvisorSectionState extends State<AiAdvisorSection> {
+  bool _open = false;
+
+  // 이 평가에 이미 끝까지 답했는지. 읽는 중이면 null (그동안은 답한 것으로 봅니다)
+  bool? _replied;
+  final List<String> _answers = [];
+  late String _key = AiCoach.replyKey(widget.report);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReplied();
+  }
+
+  @override
+  void didUpdateWidget(AiAdvisorSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final String key = AiCoach.replyKey(widget.report);
+    if (key == _key) return;
+    // 평가가 바뀌었으면(규칙 문장 -> AI 문장 등) 대화를 처음부터 다시 합니다.
+    _key = key;
+    _answers.clear();
+    _replied = null;
+    _loadReplied();
+  }
+
+  Future<void> _loadReplied() async {
+    final String key = _key;
+    final bool replied = await AiCoach.instance.wasReplied(
+      widget.userId,
+      widget.report.range,
+      key,
+    );
+    if (mounted && key == _key) setState(() => _replied = replied);
+  }
+
+  static String _answerFor(InsightTone tone) =>
+      tone == InsightTone.good ? '고마워요!' : '알겠습니다.';
+
+  void _answer(String text) {
+    setState(() => _answers.add(text));
+    if (_answers.length >= widget.report.comments.length) {
+      AiCoach.instance.markReplied(widget.userId, widget.report.range, _key);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
     final String? error = AiCoach.instance.lastError;
+    final InsightReport report = widget.report;
+    final List<InsightComment> comments = report.comments;
+    // 새 평가면 하나씩, 이미 답한 평가면 한꺼번에
+    final bool talking = _replied == false;
+    final int shown = talking
+        ? (_answers.length + 1).clamp(0, comments.length)
+        : comments.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -822,8 +887,26 @@ class AiAdvisorSection extends StatelessWidget {
                       ),
                     ),
                   ),
-                  for (final comment in report.comments)
-                    _Bubble.forTone(comment.tone, child: _CommentLine(comment)),
+                  if (comments.isNotEmpty)
+                    _FoldButton(
+                      open: _open,
+                      count: comments.length,
+                      onTap: () => setState(() => _open = !_open),
+                    ),
+                  if (_open)
+                    for (int i = 0; i < shown; i++) ...[
+                      _Bubble.forTone(
+                        comments[i].tone,
+                        child: _CommentLine(comments[i]),
+                      ),
+                      if (talking && i < _answers.length)
+                        _MyBubble(text: _answers[i])
+                      else if (talking && i == _answers.length)
+                        _ReplyButton(
+                          text: _answerFor(comments[i].tone),
+                          onTap: () => _answer(_answerFor(comments[i].tone)),
+                        ),
+                    ],
                 ],
               ),
             ),
@@ -838,6 +921,107 @@ class AiAdvisorSection extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+// 한 줄 평 아래 "더보기 ▾ / 접기 ▴"
+class _FoldButton extends StatelessWidget {
+  final bool open;
+  final int count;
+  final VoidCallback onTap;
+
+  const _FoldButton({
+    required this.open,
+    required this.count,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.only(
+          left: AppSpacing.xs,
+          bottom: AppSpacing.sm,
+        ),
+        child: Text(
+          open ? '접기 ▴' : '더보기 ▾  조언 $count개',
+          style: AppTheme.sans.copyWith(
+            fontSize: 12.5,
+            fontWeight: AppTheme.sansMedium,
+            color: AiPalette.mid,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// 내 답장 말풍선 (오른쪽, 오른쪽 위 모서리만 덜 둥글게)
+class _MyBubble extends StatelessWidget {
+  final String text;
+
+  const _MyBubble({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Container(
+        margin: const EdgeInsets.only(left: 64, bottom: AppSpacing.sm),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md - 2,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          border: Border.all(color: AiPalette.soft),
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(AppRadius.md),
+            topRight: Radius.circular(4),
+            bottomLeft: Radius.circular(AppRadius.md),
+            bottomRight: Radius.circular(AppRadius.md),
+          ),
+        ),
+        child: Text(
+          text,
+          style: AppTheme.sans.copyWith(fontSize: 13.5, color: AiPalette.ink),
+        ),
+      ),
+    );
+  }
+}
+
+// 답장 버튼. 누르면 내 말풍선이 되고 다음 조언이 나옵니다.
+class _ReplyButton extends StatelessWidget {
+  final String text;
+  final VoidCallback onTap;
+
+  const _ReplyButton({required this.text, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: OutlinedButton(
+          onPressed: onTap,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AiPalette.ink,
+            side: const BorderSide(color: AiPalette.ink, width: 1.2),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.xs,
+            ),
+            minimumSize: const Size(0, 34),
+          ),
+          child: Text(text),
+        ),
+      ),
     );
   }
 }
@@ -892,7 +1076,7 @@ class _Bubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.only(right: 40, bottom: AppSpacing.sm),
       child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md - 2,

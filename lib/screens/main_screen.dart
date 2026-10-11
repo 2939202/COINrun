@@ -12,7 +12,6 @@ import '../widgets/home_widgets.dart';
 import '../widgets/notched_box.dart';
 import '../widgets/run_log_tile.dart';
 import 'ai_report_screen.dart'; //AI 평가
-import 'character_pick_screen.dart'; //처음 캐릭터 고르기
 import 'course_screen.dart'; //코스 고르기
 import 'profile_screen.dart'; //프로필
 import 'pvp_screen.dart'; //게임 플레잉
@@ -55,6 +54,20 @@ class _MainScreenState extends State<MainScreen> {
     _userId,
     InsightRange.week,
   );
+
+  // 시연용: 홈의 골드를 빠르게 6번 누르면 레벨 10, 골드 30,000이 됩니다.
+  // 교수님 앞에서 잡화점과 갑옷까지 바로 보여주려고 둔 것입니다.
+  Future<void> _grantDemo() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await UserRepository.instance.grantDemo(_userId);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('시연용: 레벨 10, 골드 30,000')),
+      );
+    } catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text('시연용 지급 실패: $error')));
+    }
+  }
 
   void _open(Widget screen) {
     Navigator.push(context, MaterialPageRoute(builder: (context) => screen));
@@ -100,9 +113,6 @@ class _MainScreenState extends State<MainScreen> {
           );
         }
 
-        // 캐릭터(남/여)를 아직 고르지 않았으면 홈 대신 고르는 화면을 한 번 보여줍니다.
-        if (user.look == null) return CharacterPickScreen(userId: _userId);
-
         return Scaffold(
           body: SafeArea(
             bottom: false,
@@ -117,6 +127,7 @@ class _MainScreenState extends State<MainScreen> {
                 HomeHeader(
                   user: user,
                   onSettings: () => _open(SettingsScreen(userId: _userId)),
+                  onGoldSecret: _grantDemo,
                 ),
                 const SizedBox(height: HomeHeader.nameGap),
                 LevelCard(user: user),
