@@ -56,3 +56,5 @@ android/.kotlin/
 
 # 폰트 원본 압축파일 (풀어서 assets/fonts/ 에 넣었습니다)
 *.zip
+
+.firebase/
