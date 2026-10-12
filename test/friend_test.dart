@@ -16,9 +16,16 @@ void main() {
       expect(FriendRepository.uidFromLink('coinrun://player/a/b'), isNull);
     });
 
-    test('친구 링크는 coinrun://app/player/<uid>이고, 예전 QR 모양도 읽습니다', () {
-      expect(PlayerCardScreen.qrData('abc'), 'coinrun://app/player/abc');
+    test('친구 링크는 https 초대 페이지이고, coinrun:// 모양도 읽습니다', () {
+      expect(
+        PlayerCardScreen.qrData('abc'),
+        'https://spot7123-3ad2d.web.app/p/abc',
+      );
       expect(FriendRepository.uidFromLink('coinrun://app/player/abc'), 'abc');
+      expect(
+        FriendRepository.uidFromLink('https://spot7123-3ad2d.web.app/p/abc'),
+        'abc',
+      );
       expect(FriendRepository.uidFromLink(' coinrun://player/xyz '), 'xyz');
       expect(FriendRepository.uidFromLink('coinrun://app/player/'), isNull);
     });

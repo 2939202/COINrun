@@ -60,7 +60,7 @@ void main() {
     });
 
     test('QR에는 계정을 가리키는 주소가 들어갑니다', () {
-      expect(PlayerCardScreen.qrData('abc'), 'coinrun://app/player/abc');
+      expect(PlayerCardScreen.qrData('abc'), 'https://spot7123-3ad2d.web.app/p/abc');
     });
   });
 

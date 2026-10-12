@@ -64,8 +64,11 @@ class FriendRepository {
   static const String linkPrefix = 'coinrun://app/player/';
   // 예전 QR 모양. 이미 찍어 둔 그림도 읽히게 남겨 둡니다.
   static const String oldLinkPrefix = 'coinrun://player/';
+  // 공유·QR에 실제로 넣는 링크. 카톡 등은 coinrun:// 를 눌리는 링크로 안 만들어 주므로
+  // https 페이지(hosting/p/index.html)를 거쳐 앱을 엽니다.
+  static const String webLinkPrefix = 'https://spot7123-3ad2d.web.app/p/';
 
-  static String linkFor(String uid) => '$linkPrefix$uid';
+  static String linkFor(String uid) => '$webLinkPrefix$uid';
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -80,6 +83,7 @@ class FriendRepository {
     final String? prefix = [
       linkPrefix,
       oldLinkPrefix,
+      webLinkPrefix,
     ].where(text.startsWith).firstOrNull;
     if (prefix == null) return null;
     final String uid = text.substring(prefix.length);
