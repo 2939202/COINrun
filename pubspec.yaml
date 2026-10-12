@@ -36,6 +36,10 @@ dependencies:
   flutter_compass: ^0.8.1
   vibration: ^3.2.1
   firebase_ai: ^4.0.0
+  qr_flutter: ^4.1.0
+  share_plus: ^13.3.1
+  audioplayers: ^6.8.1
+  shared_preferences: ^2.5.6
 
 dev_dependencies:
   flutter_test:
@@ -47,8 +51,10 @@ dev_dependencies:
 flutter:
   assets:
     - assets/models/ # 캐릭터 3D 모델
+    - assets/sounds/ # 대결 효과음 (때리기, 맞기, 피하기)
     - assets/viewer/ # 3D 캐릭터 뷰어 (three.js r160, MIT)
     - assets/icons/ # 잡화점 옷 아이콘 (3D 모델로 찍은 그림)
+    - assets/backgrounds/ # 캐릭터 배경(안개 들판, 숲길)과 길드 배경 (살짝 픽셀화)
     - assets/character/ # 캐릭터 2D 이미지
     - assets/geo/ # 서울 구 경계선 (지금 위치의 구 찾기)
   uses-material-design: true

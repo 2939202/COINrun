@@ -3,10 +3,12 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 
+import '../game/backdrop_catalog.dart';
 import '../game/character_outfit.dart';
 import '../game/course_coins.dart';
 import '../game/equipment_catalog.dart';
 import '../game/equipment_rules.dart';
+import '../game/pet_catalog.dart';
 import '../game/route_simplifier.dart';
 import '../game/run_totals.dart';
 import '../game/stats_period.dart';
@@ -271,7 +273,7 @@ class UserRepository {
       final snapshot = await transaction.get(userDoc);
       if (!snapshot.exists) return null;
       transaction.set(userDoc, {'look': look.id}, SetOptions(merge: true));
-      return UserModel.fromMap(snapshot.data()!);
+      return UserModel.fromMap({...snapshot.data()!, 'look': look.id});
     });
     // 대결 상대 목록에도 겉모습을 올립니다. 게스트는 랭킹에 없으므로 건너뜁니다.
     if (user != null && !user.isGuest) {
@@ -280,7 +282,8 @@ class UserRepository {
           .set(
             RankingRepository.appearanceData(
               look: look,
-              setId: user.equippedSetId,
+              setId: user.visibleSetId,
+              dogStage: user.dogStage,
             ),
             SetOptions(merge: true),
           );
@@ -308,6 +311,7 @@ class UserRepository {
         'gold': demoGold,
         'totalExp': totalExp,
       }, SetOptions(merge: true));
+      _logLevels(transaction, userId, user.level, demoLevel);
       if (!user.isGuest) {
         transaction.set(
           RankingRepository.instance.entryDoc(userId),
@@ -321,6 +325,38 @@ class UserRepository {
         );
       }
     });
+  }
+
+  // ----------------------------------------------------------
+  // 레벨 돌파 기록 (users/{uid}/levels/{레벨})
+  //
+  // 레벨이 오를 때마다 그 레벨에 처음 닿은 때를 적어 둡니다. 플레이어 카드에서 보여줍니다.
+  // 이 기능을 넣기 전에 오른 레벨은 기록이 없습니다.
+  // ----------------------------------------------------------
+  void _logLevels(Transaction transaction, String userId, int from, int to) {
+    for (int level = from + 1; level <= to; level++) {
+      transaction.set(_userDoc(userId).collection('levels').doc('$level'), {
+        'level': level,
+        'reachedAt': FieldValue.serverTimestamp(),
+      });
+    }
+  }
+
+  // (레벨, 닿은 때) 높은 레벨부터
+  Stream<List<(int, DateTime?)>> watchLevelLog(String userId) {
+    return _userDoc(userId)
+        .collection('levels')
+        .orderBy('level', descending: true)
+        .snapshots()
+        .map(
+          (query) => [
+            for (final doc in query.docs)
+              (
+                (doc.data()['level'] as num?)?.toInt() ?? 0,
+                (doc.data()['reachedAt'] as Timestamp?)?.toDate(),
+              ),
+          ],
+        );
   }
 
   // 목록에서만 감춥니다. 통계와 보상은 그대로 둡니다.
@@ -530,6 +566,9 @@ class UserRepository {
     // AI 비서가 쓴 평가 저장본과 이번 주 목표
     await _deleteAll(_userDoc(userId).collection('insights'));
     await _deleteAll(_userDoc(userId).collection('goals'));
+    await _deleteAll(_userDoc(userId).collection('levels'));
+    // 예전 버전이 넣어 둔 우편도 지웁니다.
+    await _deleteAll(_userDoc(userId).collection('mail'));
 
     // 내가 만든 사설 코스. 코스 아래 하트 기록부터 지워야 주인 없는 문서가 남지 않습니다.
     // (내가 남의 코스에 누른 하트는 남습니다. 찾으려면 컬렉션 그룹 색인이 따로 필요합니다)
@@ -671,6 +710,7 @@ class UserRepository {
         'totalSteps': user.totalSteps + run.steps,
         'totalExp': totalExp,
       }, SetOptions(merge: true));
+      _logLevels(transaction, userId, user.level, next.level);
 
       // 랭킹 목록도 같은 트랜잭션에서 갱신합니다.
       // 따로 쓰면 한쪽만 성공해서 순위가 실제 기록과 어긋날 수 있습니다.
@@ -755,6 +795,7 @@ class UserRepository {
   // ----------------------------------------------------------
 
   // 세트를 삽니다. 골드를 빼고, 보유 목록에 넣고, 바로 입혀줍니다.
+  // 능력치 옷과 보이는 옷을 둘 다 새 옷으로 바꿉니다. (보이는 옷은 능력치 옷을 따라감)
   // 트랜잭션인 이유: 버튼을 빠르게 두 번 눌러도 골드가 두 번 빠지지 않게 하기 위해서입니다.
   Future<EquipmentSet> buySet(String userId, String setId) {
     final EquipmentSet? set = EquipmentCatalog.byId(setId);
@@ -774,13 +815,22 @@ class UserRepository {
         'gold': user.gold - set.price,
         'ownedSetIds': [...user.ownedSetIds, set.id],
         'equippedSetId': set.id,
+        'outfitSetId': FieldValue.delete(),
       }, SetOptions(merge: true));
+      if (!user.isGuest) {
+        transaction.set(
+          RankingRepository.instance.entryDoc(userId),
+          RankingRepository.appearanceData(look: user.look, setId: set.id),
+          SetOptions(merge: true),
+        );
+      }
 
       return set;
     });
   }
 
-  // 이미 사 둔 세트로 갈아입습니다. setId가 null이면 벗습니다.
+  // 능력치 옷을 바꿉니다. setId가 null이면 기본 옷(능력치 없음)입니다.
+  // 보이는 옷을 따로 정해 두지 않았으면 겉모습도 같이 바뀝니다.
   Future<void> equipSet(String userId, String? setId) {
     final userDoc = _userDoc(userId);
 
@@ -796,13 +846,157 @@ class UserRepository {
       transaction.set(userDoc, {
         'equippedSetId': setId,
       }, SetOptions(merge: true));
-      // 대결 상대 목록에도 입은 옷을 올립니다. 게스트는 랭킹에 없으므로 건너뜁니다.
+      // 대결 상대 목록에도 보이는 옷을 올립니다. 게스트는 랭킹에 없으므로 건너뜁니다.
+      final UserModel after = UserModel.fromMap({
+        ...snapshot.data()!,
+        'equippedSetId': setId,
+      });
+      if (!user.isGuest) {
+        transaction.set(
+          RankingRepository.instance.entryDoc(userId),
+          RankingRepository.appearanceData(
+            look: user.look,
+            setId: after.visibleSetId,
+          ),
+          SetOptions(merge: true),
+        );
+      }
+    });
+  }
+
+  // 보이는 옷을 바꿉니다. setId가 null이면 기본 옷입니다. 능력치는 그대로입니다.
+  Future<void> wearOutfit(String userId, String? setId) {
+    final userDoc = _userDoc(userId);
+
+    return _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(userDoc);
+      if (!snapshot.exists) throw EquipmentException('유저 정보를 찾을 수 없습니다.');
+
+      final user = UserModel.fromMap(snapshot.data()!);
+      if (setId != null && !user.owns(setId)) {
+        throw EquipmentException('가지고 있지 않은 옷입니다.');
+      }
+
+      transaction.set(userDoc, {
+        'outfitSetId': setId ?? UserModel.basicOutfit,
+      }, SetOptions(merge: true));
       if (!user.isGuest) {
         transaction.set(
           RankingRepository.instance.entryDoc(userId),
           RankingRepository.appearanceData(look: user.look, setId: setId),
           SetOptions(merge: true),
         );
+      }
+    });
+  }
+
+  // ----------------------------------------------------------
+  // 간식과 강아지 (game/pet_catalog.dart)
+  // ----------------------------------------------------------
+
+  // 간식을 count개 삽니다. 한 번에 1~50개, 하나에 80골드씩.
+  Future<void> buySnack(String userId, int count) {
+    final userDoc = _userDoc(userId);
+    if (count < 1 || count > PetCatalog.maxPerPurchase) {
+      throw EquipmentException(
+        '한 번에 1~${PetCatalog.maxPerPurchase}개까지 살 수 있어요.',
+      );
+    }
+    final int price = PetCatalog.snackPrice * count;
+
+    return _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(userDoc);
+      if (!snapshot.exists) throw EquipmentException('유저 정보를 찾을 수 없습니다.');
+
+      final user = UserModel.fromMap(snapshot.data()!);
+      if (user.gold < price) throw EquipmentException('골드가 모자라요.');
+
+      transaction.set(userDoc, {
+        'gold': user.gold - price,
+        'snacks': user.snacks + count,
+      }, SetOptions(merge: true));
+    });
+  }
+
+  // ----------------------------------------------------------
+  // 내 캐릭터 배경 (game/backdrop_catalog.dart)
+  // ----------------------------------------------------------
+
+  // 배경을 삽니다. 사자마자 그 배경으로 바꿔 줍니다.
+  Future<void> buyBackdrop(String userId, Backdrop backdrop) {
+    final userDoc = _userDoc(userId);
+
+    return _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(userDoc);
+      if (!snapshot.exists) throw EquipmentException('유저 정보를 찾을 수 없습니다.');
+
+      final user = UserModel.fromMap(snapshot.data()!);
+      if (user.ownsBackdrop(backdrop)) {
+        throw EquipmentException('이미 가진 배경입니다.');
+      }
+      if (user.gold < backdrop.price) throw EquipmentException('골드가 모자라요.');
+
+      transaction.set(userDoc, {
+        'gold': user.gold - backdrop.price,
+        'ownedBackdrops': [...user.ownedBackdrops, backdrop.id],
+        'backdrop': backdrop.id,
+      }, SetOptions(merge: true));
+    });
+  }
+
+  // 배경을 바꿉니다. 가진 배경만 고를 수 있습니다.
+  Future<void> setBackdrop(String userId, Backdrop backdrop) {
+    final userDoc = _userDoc(userId);
+
+    return _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(userDoc);
+      if (!snapshot.exists) throw EquipmentException('유저 정보를 찾을 수 없습니다.');
+
+      final user = UserModel.fromMap(snapshot.data()!);
+      if (!user.ownsBackdrop(backdrop)) {
+        throw EquipmentException('가지고 있지 않은 배경입니다.');
+      }
+
+      transaction.set(userDoc, {
+        'backdrop': backdrop.id,
+      }, SetOptions(merge: true));
+    });
+  }
+
+  // 강아지에게 이름을 지어 줍니다. 빈 이름이면 지웁니다. (최대 10자)
+  Future<void> setDogName(String userId, CharacterLook dog, String name) {
+    final String trimmed = name.trim();
+    final String clipped = trimmed.length > 10
+        ? trimmed.substring(0, 10)
+        : trimmed;
+    return _userDoc(userId).set({
+      'dogNames': {dog.id: clipped},
+    }, SetOptions(merge: true));
+  }
+
+  // 강아지 캐릭터에게 간식을 하나 줍니다. 다 자란 강아지도 먹을 수는 있습니다.
+  // 지금 쓰는 캐릭터가 그 강아지면 대결 상대 목록의 단계도 맞춥니다.
+  Future<void> feedPet(String userId, CharacterLook pet) {
+    final userDoc = _userDoc(userId);
+
+    return _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(userDoc);
+      if (!snapshot.exists) throw EquipmentException('유저 정보를 찾을 수 없습니다.');
+
+      final user = UserModel.fromMap(snapshot.data()!);
+      if (user.snacks <= 0) {
+        throw EquipmentException('간식이 없어요. 잡화점에서 살 수 있어요.');
+      }
+
+      final int fed = user.fedOf(pet.id) + 1;
+      transaction.set(userDoc, {
+        'snacks': user.snacks - 1,
+        'petFed': {...user.petFed, pet.id: fed},
+      }, SetOptions(merge: true));
+      if (!user.isGuest && user.look == pet) {
+        transaction.set(RankingRepository.instance.entryDoc(userId), {
+          'dogStage': PetCatalog.stageFor(fed),
+        }, SetOptions(merge: true));
       }
     });
   }

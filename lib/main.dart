@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart'; //파이어 베이스의 기�
 import 'firebase_options.dart'; //삼성인지 애플인지 판단하고 설정하는 파이어베이스
 import 'screens/auth_gate.dart'; //로그인 여부를 보고 화면을 고르는 문지기
 import 'theme/app_theme.dart'; //앱 전체 디자인 기준 (색상, 글꼴, 버튼 모양)
+import 'widgets/friend_link_handler.dart'; //친구 링크(QR)를 받으면 친구 요청을 보낼지 묻습니다
 
 void main() async {
   //메인 시작
@@ -25,9 +26,14 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false, //못생긴 디버그 띠 제거해줍니다.
-      title: '달리랑 RPG', //앱의 제목을
+      title: '코인런', //앱의 제목을
       theme: AppTheme.light(), //theme/app_theme.dart에서 정한 디자인을 앱 전체에 적용합니다.
       home: const AuthGate(), //로그인 안 했으면 로그인 화면, 했으면 홈 화면
+      // 친구 링크는 어느 화면에서든 받아야 해서 앱 맨 위에 깔아 둡니다.
+      navigatorKey: FriendLinkHandler.navigatorKey,
+      scaffoldMessengerKey: FriendLinkHandler.messengerKey,
+      builder: (context, child) =>
+          FriendLinkHandler(child: child ?? const SizedBox.shrink()),
     );
   }
 }

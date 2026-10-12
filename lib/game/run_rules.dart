@@ -94,6 +94,22 @@ class RunRules {
     return spent + exp;
   }
 
+  // 등급이 바뀌는 레벨 (tierName과 같아야 합니다)
+  static const List<int> tierStarts = [1, 3, 5, 7, 10];
+
+  // 이 레벨과 같은 등급의 레벨 범위. 맨 위 등급은 끝이 없어서 max가 null입니다.
+  static ({int min, int? max}) tierRange(int level) {
+    int start = tierStarts.first;
+    int? end;
+    for (int i = 0; i < tierStarts.length; i++) {
+      if (level >= tierStarts[i]) {
+        start = tierStarts[i];
+        end = i + 1 < tierStarts.length ? tierStarts[i + 1] - 1 : null;
+      }
+    }
+    return (min: start, max: end);
+  }
+
   // 레벨에 따른 등급 이름
   static String tierName(int level) {
     if (level >= 10) return '다이아 러너';

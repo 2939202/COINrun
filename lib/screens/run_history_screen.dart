@@ -105,7 +105,10 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
             _Totals(runs: runs),
             const SizedBox(height: AppSpacing.lg),
             const Divider(),
-            for (final run in runs) ...[
+            for (final (index, run) in runs.indexed) ...[
+              if (_monthOf(run) !=
+                  (index == 0 ? null : _monthOf(runs[index - 1])))
+                _MonthHeader(label: _monthOf(run) ?? '날짜 없음'),
               RunLogTile(
                 run: run,
                 trashEnabled: _trashEnabled,
@@ -118,7 +121,9 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
                   ),
                 ),
               ),
-              if (run != runs.last) const Divider(),
+              if (run != runs.last &&
+                  _monthOf(runs[index + 1]) == _monthOf(run))
+                const Divider(),
             ],
             const SizedBox(height: AppSpacing.lg),
             Text(
@@ -130,6 +135,39 @@ class _RunHistoryScreenState extends State<RunHistoryScreen> {
           ],
         );
       },
+    );
+  }
+}
+
+// 목록 사이사이 "2026년 10월"처럼 달이 바뀌는 곳에 끼우는 머리말
+String? _monthOf(RunLog run) {
+  final DateTime? at = run.createdAt?.toLocal();
+  return at == null ? null : '${at.year}년 ${at.month}월';
+}
+
+class _MonthHeader extends StatelessWidget {
+  final String label;
+
+  const _MonthHeader({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.lg, bottom: AppSpacing.xs),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: AppTheme.sans.copyWith(
+              fontSize: 13,
+              fontWeight: AppTheme.sansMedium,
+              color: AppColors.black,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          const Expanded(child: Divider(color: AppColors.black)),
+        ],
+      ),
     );
   }
 }

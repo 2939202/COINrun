@@ -103,16 +103,11 @@ class _SwapModeButtonState extends State<SwapModeButton>
           gradient: GoldColors.metal,
           border: Border.all(color: GoldColors.edge, width: 1.2),
           boxShadow: const [
-            // 아래로 떨어지는 그림자 + 금빛 번짐
+            // 아래로 떨어지는 그림자 (금빛 번짐은 너무 튀어서 뺐습니다)
             BoxShadow(
-              color: Color(0x665A3D0A),
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-            BoxShadow(
-              color: Color(0x55FFD700),
-              blurRadius: 8,
-              spreadRadius: 0.5,
+              color: Color(0x553E2E1A),
+              blurRadius: 3,
+              offset: Offset(0, 1.5),
             ),
           ],
         ),
@@ -125,14 +120,14 @@ class _SwapModeButtonState extends State<SwapModeButton>
               DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: radius,
-                  border: Border.all(color: const Color(0x99FFF8DC), width: 1),
+                  border: Border.all(color: const Color(0x66F5EDE0), width: 1),
                   gradient: const LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Color(0x55FFFFFF),
+                      Color(0x33FFFFFF),
                       Color(0x00FFFFFF),
-                      Color(0x33000000),
+                      Color(0x22000000),
                     ],
                     stops: [0, 0.45, 1],
                   ),
@@ -152,7 +147,7 @@ class _SwapModeButtonState extends State<SwapModeButton>
                         end: Alignment(x + 0.6, 1),
                         colors: const [
                           Color(0x00FFFFFF),
-                          Color(0xCCFFFFFF),
+                          Color(0x66FFF8EC), // 은은하게 한 번 스칩니다
                           Color(0x00FFFFFF),
                         ],
                         stops: const [0.35, 0.5, 0.65],
@@ -165,7 +160,7 @@ class _SwapModeButtonState extends State<SwapModeButton>
                 type: MaterialType.transparency,
                 child: InkWell(
                   onTap: widget.onTap,
-                  splashColor: const Color(0x66FFF3B0),
+                  splashColor: const Color(0x55E9DCC0),
                   highlightColor: const Color(0x33FFFFFF),
                   child: const Icon(
                     Icons.swap_horiz,
@@ -173,7 +168,7 @@ class _SwapModeButtonState extends State<SwapModeButton>
                     color: GoldColors.engraved,
                     // 금에 새긴 것처럼 아래쪽에 밝은 그림자를 한 줄 깝니다.
                     shadows: [
-                      Shadow(color: Color(0xAAFFF6D5), offset: Offset(0, 1)),
+                      Shadow(color: Color(0x88EFE4CC), offset: Offset(0, 1)),
                     ],
                   ),
                 ),
@@ -186,25 +181,28 @@ class _SwapModeButtonState extends State<SwapModeButton>
   }
 }
 
-// 금속 금색. 평평한 노란색 한 가지로는 금이 아니라 겨자색으로 보여서,
-// 밝은 금과 짙은 금을 번갈아 놓아 빛이 반사되는 것처럼 만듭니다.
+// 금속 금색 (오래된 놋쇠)
+//
+// 번쩍이는 노란 금은 갈색 위주인 앱에서 혼자 튀어서, 채도를 낮춘 놋쇠빛으로 둡니다.
+// 그래도 평평한 한 가지 색이면 금속이 아니라 종이처럼 보여서, 밝은 면과 어두운 면을
+// 번갈아 놓아 빛이 반사되는 것처럼 만듭니다. (앱 갈색: accentOnDark #C9A87C, accent #8A6A3E)
 class GoldColors {
   GoldColors._();
 
-  static const Color edge = Color(0xFF8A6212); // 바깥 테두리 (짙은 구리빛 금)
-  static const Color engraved = Color(0xFF5C3D06); // 금 위에 새긴 화살표
+  static const Color edge = Color(0xFF7A5F3A); // 바깥 테두리 (짙은 놋쇠)
+  static const Color engraved = Color(0xFF3E2E1A); // 놋쇠 위에 새긴 화살표
 
   static const LinearGradient metal = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFFFFF1A8), // 반사광
-      Color(0xFFE8C04A),
-      Color(0xFFB8860B), // 짙은 금
-      Color(0xFFF7DC6F),
-      Color(0xFFFFF6C8), // 두 번째 반사광
-      Color(0xFFD4A52A),
-      Color(0xFF9C7012),
+      Color(0xFFEDE2C8), // 반사광
+      Color(0xFFD3BC8E),
+      Color(0xFFA88A5C), // 짙은 놋쇠
+      Color(0xFFC9AE7E),
+      Color(0xFFE4D6B6), // 두 번째 반사광
+      Color(0xFFB89A6A),
+      Color(0xFF8E7148),
     ],
     stops: [0, 0.18, 0.38, 0.55, 0.64, 0.82, 1],
   );

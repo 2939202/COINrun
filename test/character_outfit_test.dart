@@ -54,7 +54,8 @@ void main() {
       for (final set in EquipmentCatalog.all) {
         expect(CharacterOutfit.clothesForSet, contains(set.id));
       }
-      for (final look in CharacterLook.values) {
+      // 강아지는 파츠 대신 'dog:...' 하나라서 사람만 봅니다.
+      for (final look in CharacterLook.humans) {
         for (final setId in [null, ...EquipmentCatalog.all.map((s) => s.id)]) {
           for (final part in CharacterOutfit.partsFor(look, setId)) {
             expect(CharacterOutfit.allParts, contains(part));

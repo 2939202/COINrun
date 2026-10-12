@@ -34,7 +34,7 @@ class MapTiles {
 
   static const String attributionText = '© OpenStreetMap contributors';
 
-  static const String userAgent = 'app.dalirang.rpg';
+  static const String userAgent = 'app.coinrun';
 
   // 채도를 낮추는 행렬. 마지막 줄은 투명도라 건드리지 않습니다.
   static const List<double> _desaturate = <double>[
@@ -59,6 +59,27 @@ class MapTiles {
     1.0000,
     0.0000,
   ];
+
+  // 보물 지도 색 (러닝 화면). 밝기만 남긴 뒤 연한 종이색으로 다시 칠합니다.
+  //   흰 길 -> 연한 양피지색 (254, 243, 218), 검은 글자 -> 흐린 고동색 (96, 90, 78)
+  // 빨강·초록 같은 색은 사라지고 밝고 어두움만 남아서, 위에 그린 경로가 또렷합니다.
+  // 너무 누렇고 진하다고 해서, 밝기 폭을 줄이고 바닥색을 올려 연하게 했습니다.
+  static const List<double> _sepia = <double>[
+    0.300 * 0.62, 0.590 * 0.62, 0.110 * 0.62, 0, 96, // R
+    0.300 * 0.60, 0.590 * 0.60, 0.110 * 0.60, 0, 90, // G
+    0.300 * 0.55, 0.590 * 0.55, 0.110 * 0.55, 0, 78, // B
+    0, 0, 0, 1, 0, // 투명도
+  ];
+
+  // 러닝 화면 지도 바탕. 테두리 비네팅과 종이 결은 widgets/treasure_map.dart에서 얹습니다.
+  static List<Widget> treasureLayers() {
+    return [
+      ColorFiltered(
+        colorFilter: const ColorFilter.matrix(_sepia),
+        child: TileLayer(urlTemplate: _url, userAgentPackageName: userAgent),
+      ),
+    ];
+  }
 
   // 지도 바탕. FlutterMap의 children 맨 앞에 펼쳐서(...) 넣습니다.
   static List<Widget> layers() {

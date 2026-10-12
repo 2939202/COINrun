@@ -206,10 +206,12 @@ class InsightScoreCard extends StatelessWidget {
     );
 
     // 한 줄에 점수(왼쪽)와 점수 내역(오른쪽)을 나란히 둬서 높이를 줄입니다.
-    // 색은 홈의 검은 카드와 반대로, 밝은 갈색 바탕에 먹색 글자입니다.
+    // 색은 짙은 먹색 바탕에 놋쇠색 점수, 안쪽에 놋쇠색 실선을 한 줄 둘러 고급스럽게.
     return NotchedBox(
       cut: 12,
       color: _ReportInk.card,
+      innerBorderColor: _ReportInk.line,
+      innerBorderInset: 4,
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.md,
         AppSpacing.sm + 4,
@@ -291,16 +293,17 @@ class InsightScoreCard extends StatelessWidget {
   }
 }
 
-// 리포트 카드의 색. AI 탭 공통 색(theme/ai_palette.dart)에서 가져옵니다.
-// 짙은 갈색 바탕에 종이색 글자, 점수와 채운 막대는 밝은 갈색입니다.
+// 리포트 카드의 색. 예전 갈색 바탕이 탁해 보여서 짙은 먹색 + 놋쇠색으로 바꿨습니다.
+// 홈의 검은 카드, 플레이어 카드와 같은 계열입니다.
 class _ReportInk {
   _ReportInk._();
 
-  static const Color card = AiPalette.deep; // 바탕
-  static const Color text = AiPalette.paper; // 글자
-  static const Color accent = AiPalette.soft; // 점수, 채운 막대
-  static const Color muted = Color(0xB3F7F1E6); // 종이색 70% - 작은 글자
-  static const Color track = Color(0x33F7F1E6); // 종이색 20% - 막대 바닥
+  static const Color card = Color(0xFF221D19); // 바탕 (따뜻한 먹색)
+  static const Color text = AppColors.paperOnDark; // 글자
+  static const Color accent = AppColors.accentOnDark; // 점수, 채운 막대 (놋쇠색)
+  static const Color line = Color(0x66C9A87C); // 안쪽 실선 (놋쇠색 40%)
+  static const Color muted = Color(0xB3ECDDBE); // 종이색 70% - 작은 글자
+  static const Color track = Color(0x33ECDDBE); // 종이색 20% - 막대 바닥
 }
 
 // 이번 vs 지난번: 거리, 횟수, 페이스
@@ -947,12 +950,24 @@ class _FoldButton extends StatelessWidget {
           left: AppSpacing.xs,
           bottom: AppSpacing.sm,
         ),
-        child: Text(
-          open ? '접기 ▴' : '더보기 ▾  조언 $count개',
-          style: AppTheme.sans.copyWith(
-            fontSize: 12.5,
-            fontWeight: AppTheme.sansMedium,
-            color: AiPalette.mid,
+        // 눈에 띄게: 진한 갈색 알약 버튼 (펼친 뒤 "접기"는 옅게)
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: open ? AiPalette.pale : AiPalette.deep,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: AiPalette.soft),
+            ),
+            child: Text(
+              open ? '접기 ▴' : '더보기 ▾  조언 $count개',
+              style: AppTheme.sans.copyWith(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                color: open ? AiPalette.deep : AiPalette.paper,
+              ),
+            ),
           ),
         ),
       ),
@@ -1027,27 +1042,27 @@ class _ReplyButton extends StatelessWidget {
 }
 
 // 말풍선 왼쪽의 "AI" 표시
+// AI 비서 얼굴: 헤드폰 쓴 픽셀 로봇 (assets/icons/ai_advisor.png)
 class _AdvisorBadge extends StatelessWidget {
   const _AdvisorBadge();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 36,
-      height: 36,
-      alignment: Alignment.center,
-      decoration: const BoxDecoration(
-        color: AppColors.black,
-        shape: BoxShape.circle,
+      width: 40,
+      height: 40,
+      padding: const EdgeInsets.fromLTRB(3, 4, 3, 0),
+      decoration: BoxDecoration(
+        color: AppColors.cream,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: AppColors.sand),
       ),
-      child: Text(
-        'AI',
-        style: AppTheme.sans.copyWith(
-          fontSize: 12,
-          fontWeight: AppTheme.sansMedium,
-          color: AppColors.sandOnDark,
-          letterSpacing: 0.5,
-        ),
+      clipBehavior: Clip.antiAlias,
+      child: Image.asset(
+        'assets/icons/ai_advisor.png',
+        fit: BoxFit.cover,
+        alignment: Alignment.topCenter,
+        filterQuality: FilterQuality.none,
       ),
     );
   }

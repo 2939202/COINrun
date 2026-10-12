@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../game/run_rules.dart';
 import '../game/character_outfit.dart';
+import '../game/player_number.dart';
 import '../models/ranking_entry.dart';
 import '../models/user_model.dart';
 
@@ -42,6 +44,22 @@ class RankingRepository {
         );
   }
 
+  // 자동 매칭: 이 레벨과 같은 등급인 사람들 (나도 들어 있을 수 있음)
+  // level 하나에만 범위 조건을 걸어서 따로 색인을 만들 필요가 없습니다.
+  Future<List<RankingEntry>> sameTier(int level, {int limit = 30}) async {
+    final range = RunRules.tierRange(level);
+    Query<Map<String, dynamic>> query = _board.where(
+      'level',
+      isGreaterThanOrEqualTo: range.min,
+    );
+    final int? max = range.max;
+    if (max != null) query = query.where('level', isLessThanOrEqualTo: max);
+    final snapshot = await query.limit(limit).get();
+    return [
+      for (final doc in snapshot.docs) RankingEntry.fromMap(doc.id, doc.data()),
+    ];
+  }
+
   // 내 순위 (1등이면 1). 아직 한 번도 안 뛰었으면 null입니다.
   Future<int?> myRank(RankingKind kind, UserModel user) async {
     // 게스트는 랭킹에 줄이 없어서 순위도 없습니다.
@@ -73,8 +91,38 @@ class RankingRepository {
         totalDistance: user.totalDistance,
         totalExp: user.totalExp,
       ),
-      ...appearanceData(look: user.look, setId: user.equippedSetId),
+      ...appearanceData(
+        look: user.look,
+        setId: user.visibleSetId,
+        dogStage: user.dogStage,
+      ),
+      // 길드에서 플레이어 번호로 친구를 찾을 수 있게 번호(띄어쓰기 없이)도 적습니다.
+      'playerNo': playerNoOf(userId),
     }, SetOptions(merge: true));
+  }
+
+  // 'dddd dddd' -> 'dddddddd'
+  static String playerNoOf(String userId) =>
+      PlayerNumber.of(userId).replaceAll(' ', '');
+
+  // 한 사람의 줄. 없으면(게스트이거나 탈퇴) null
+  Future<RankingEntry?> entryOf(String userId) async {
+    final snapshot = await _board.doc(userId).get();
+    final data = snapshot.data();
+    return data == null ? null : RankingEntry.fromMap(snapshot.id, data);
+  }
+
+  // 플레이어 번호로 찾기 (8자리, 띄어쓰기는 무시). 번호가 겹치면 첫 사람입니다.
+  Future<RankingEntry?> findByPlayerNo(String number) async {
+    final String digits = number.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length != 8) return null;
+    final snapshot = await _board
+        .where('playerNo', isEqualTo: digits)
+        .limit(1)
+        .get();
+    if (snapshot.docs.isEmpty) return null;
+    final doc = snapshot.docs.first;
+    return RankingEntry.fromMap(doc.id, doc.data());
   }
 
   // 러닝을 저장하는 트랜잭션 안에서도 같은 내용을 쓰기 위해 따로 빼두었습니다.
@@ -93,12 +141,19 @@ class RankingRepository {
     };
   }
 
-  // 게임 플레잉 대결에서 상대 캐릭터를 그리는 데 쓰는 겉모습 (남/여, 입은 세트)
+  // 게임 플레잉 대결에서 상대 캐릭터를 그리는 데 쓰는 겉모습 (남/여, 보이는 옷)
+  // 필드 이름은 예전 그대로 equippedSetId지만, 능력치 옷이 아니라 보이는 옷을 적습니다.
+  // 강아지 캐릭터면 단계(dogStage)도 적습니다. 모르면 적지 않고 그대로 둡니다.
   static Map<String, dynamic> appearanceData({
     required CharacterLook? look,
     required String? setId,
+    int? dogStage,
   }) {
-    return {if (look != null) 'look': look.id, 'equippedSetId': setId};
+    return {
+      if (look != null) 'look': look.id,
+      'equippedSetId': setId,
+      'dogStage': ?dogStage,
+    };
   }
 
   DocumentReference<Map<String, dynamic>> entryDoc(String userId) =>

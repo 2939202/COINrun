@@ -11,6 +11,7 @@ import '../services/ranking_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import 'gold_coin.dart';
+import 'look_image.dart';
 import 'notched_box.dart';
 import 'segment_bar.dart';
 import 'run_app_bar.dart' show GoldColors;
@@ -631,10 +632,13 @@ class RunnerCard extends StatelessWidget {
                         ),
                       ),
                     )
-                  : Image.asset(
-                      CharacterOutfit.faceFor(user.look!, user.equippedSetId),
-                      fit: BoxFit.contain,
-                      filterQuality: FilterQuality.none,
+                  : LookImage(
+                      // 강아지는 머리만, 단계 그림체 그대로
+                      asset: CharacterOutfit.faceFor(
+                        user.look!,
+                        user.visibleSetId,
+                      ),
+                      dogStage: user.dogStage,
                     ),
             ),
             Padding(
@@ -647,7 +651,10 @@ class RunnerCard extends StatelessWidget {
                   Text('내 캐릭터', style: _shortcutTitle),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    EquipmentRules.equippedSetName(user),
+                    // 강아지면 지어 준 이름, 사람이면 입은 옷
+                    (user.look?.isDog ?? false)
+                        ? (user.dogNameOf(user.look!.id) ?? user.look!.label)
+                        : EquipmentRules.equippedSetName(user),
                     style: _shortcutSub,
                   ),
                 ],
@@ -883,10 +890,11 @@ class AiReportCard extends StatelessWidget {
                 const SizedBox(height: AppSpacing.sm),
                 Text('AI 평가', style: _shortcutTitle),
                 const SizedBox(height: AppSpacing.xs),
+                // 다른 카드("전체 순위 보기", "PVP 대결")처럼 짧은 한 줄로 고정합니다.
+                // 그때그때 바뀌는 평가 문장은 AI 평가 화면에 있습니다.
                 Text(
-                  data?.headline ?? '주간·월간 분석',
+                  '주간·월간 분석',
                   style: _shortcutSub,
-                  // 카드 높이가 정해져 있어서 한 줄만. 전체 문장은 AI 평가 화면에 있습니다.
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

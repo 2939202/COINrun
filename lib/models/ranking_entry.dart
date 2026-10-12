@@ -18,6 +18,7 @@ class RankingEntry {
   final int totalExp; // 레벨 랭킹 기준
   final CharacterLook? look; // 겉모습을 올리기 전 줄에는 없습니다.
   final String? equippedSetId;
+  final int dogStage; // 강아지 캐릭터의 단계 (1~3)
 
   const RankingEntry({
     required this.userId,
@@ -27,6 +28,7 @@ class RankingEntry {
     required this.totalExp,
     this.look,
     this.equippedSetId,
+    this.dogStage = 1,
   });
 
   factory RankingEntry.fromMap(String userId, Map<String, dynamic> map) {
@@ -38,6 +40,7 @@ class RankingEntry {
       totalExp: (map['totalExp'] as num?)?.toInt() ?? 0,
       look: CharacterLook.tryParse(map['look']),
       equippedSetId: map['equippedSetId'] as String?,
+      dogStage: (map['dogStage'] as num?)?.toInt() ?? 1,
     );
   }
 }

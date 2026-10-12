@@ -1,4 +1,6 @@
+import '../game/backdrop_catalog.dart';
 import '../game/character_outfit.dart';
+import '../game/pet_catalog.dart';
 import '../game/run_rules.dart';
 
 // Firestore의 users/{userId} 문서 한 개를 나타내는 유저 데이터
@@ -31,7 +33,23 @@ class UserModel {
 
   // 장비는 세트 단위입니다. (game/equipment_catalog.dart의 id를 저장합니다)
   final List<String> ownedSetIds; // 사 둔 세트들
-  final String? equippedSetId; // 지금 입고 있는 세트. null이면 맨몸입니다.
+  final String? equippedSetId; // 능력치를 받는 세트. null이면 기본 옷(능력치 없음)입니다.
+
+  // 겉으로 보이는 옷. 능력치 옷과 다르게 입을 수 있습니다. (내 캐릭터 > 인벤토리)
+  //   null    - 능력치 옷과 같은 옷을 보여줍니다. (예전 문서도 이렇게 읽힙니다)
+  //   'basic' - 기본 옷을 보여줍니다.
+  //   세트 id  - 그 옷을 보여줍니다.
+  final String? outfitSetId;
+
+  // 간식과 강아지 (game/pet_catalog.dart)
+  final int snacks; // 가진 간식 개수
+  final Map<String, int> petFed; // 강아지 id -> 지금까지 먹은 간식 개수
+  final Map<String, String> dogNames; // 강아지 id -> 지어 준 이름
+
+  // 내 캐릭터 화면 배경 (game/backdrop_catalog.dart)
+  // 흰색·검은색은 기본이라 여기 적지 않아도 가진 것으로 봅니다.
+  final List<String> ownedBackdrops; // 산 배경
+  final String backdropId; // 고른 배경. 예전 문서는 흰색
 
   final double totalDistance; // 누적 러닝 거리 (m)
   final int totalRunSeconds; // 누적 러닝 시간 (초)
@@ -50,6 +68,12 @@ class UserModel {
     required this.gold,
     required this.ownedSetIds,
     required this.equippedSetId,
+    this.outfitSetId,
+    this.snacks = 0,
+    this.petFed = const {},
+    this.dogNames = const {},
+    this.ownedBackdrops = const [],
+    this.backdropId = 'white',
     required this.totalDistance,
     required this.totalRunSeconds,
     required this.totalMovingSeconds,
@@ -78,6 +102,48 @@ class UserModel {
 
   bool owns(String setId) => ownedSetIds.contains(setId);
 
+  bool ownsBackdrop(Backdrop backdrop) =>
+      backdrop.isFree || ownedBackdrops.contains(backdrop.id);
+
+  // 고른 배경. 산 적 없는 배경이 적혀 있으면 흰색입니다.
+  Backdrop get backdrop {
+    final Backdrop picked = BackdropCatalog.byId(backdropId);
+    return ownsBackdrop(picked) ? picked : BackdropCatalog.white;
+  }
+
+  // 화면에 그릴 옷의 세트 id. null이면 기본 옷입니다.
+  // 보이는 옷으로 고른 세트를 더는 갖고 있지 않으면 능력치 옷을 따릅니다.
+  String? get visibleSetId {
+    final String? outfit = outfitSetId;
+    if (outfit == null) return equippedSetId;
+    if (outfit == basicOutfit) return null;
+    return owns(outfit) ? outfit : equippedSetId;
+  }
+
+  static const String basicOutfit = 'basic';
+
+  int fedOf(String petId) => petFed[petId] ?? 0;
+
+  // 지어 준 이름. 아직 없으면 null
+  String? dogNameOf(String petId) {
+    final String? name = dogNames[petId]?.trim();
+    return name == null || name.isEmpty ? null : name;
+  }
+
+  // 강아지 캐릭터면 지금 단계, 사람이면 null
+  int? get dogStage {
+    final CharacterLook? current = look;
+    if (current == null || !current.isDog) return null;
+    return PetCatalog.stageFor(fedOf(current.id));
+  }
+
+  // 뷰어에 넘길 파츠 (사람은 보이는 옷, 강아지는 단계)
+  List<String> parts() => CharacterOutfit.partsFor(
+    look ?? CharacterLook.female,
+    visibleSetId,
+    dogStage: dogStage ?? 1,
+  );
+
   // Firestore는 숫자를 int/double 구분 없이 줄 수 있어서 num으로 받은 뒤 변환합니다.
   factory UserModel.fromMap(Map<String, dynamic> map) {
     return UserModel(
@@ -96,6 +162,20 @@ class UserModel {
           (map['ownedSetIds'] as List?)?.map((e) => e.toString()).toList() ??
           const [],
       equippedSetId: map['equippedSetId'] as String?,
+      outfitSetId: map['outfitSetId'] as String?,
+      snacks: (map['snacks'] as num?)?.toInt() ?? 0,
+      petFed: {
+        for (final entry in ((map['petFed'] as Map?) ?? const {}).entries)
+          entry.key.toString(): (entry.value as num?)?.toInt() ?? 0,
+      },
+      dogNames: {
+        for (final entry in ((map['dogNames'] as Map?) ?? const {}).entries)
+          entry.key.toString(): entry.value.toString(),
+      },
+      ownedBackdrops:
+          (map['ownedBackdrops'] as List?)?.map((e) => e.toString()).toList() ??
+          const [],
+      backdropId: map['backdrop'] as String? ?? BackdropCatalog.white.id,
       totalDistance: (map['totalDistance'] as num?)?.toDouble() ?? 0,
       totalRunSeconds: (map['totalRunSeconds'] as num?)?.toInt() ?? 0,
       totalMovingSeconds: (map['totalMovingSeconds'] as num?)?.toInt() ?? 0,
@@ -122,6 +202,7 @@ class UserModel {
       'gold': gold,
       'ownedSetIds': ownedSetIds,
       'equippedSetId': equippedSetId,
+      if (outfitSetId != null) 'outfitSetId': outfitSetId,
       'totalDistance': totalDistance,
       'totalRunSeconds': totalRunSeconds,
       'totalMovingSeconds': totalMovingSeconds,

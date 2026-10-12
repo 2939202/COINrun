@@ -13,6 +13,7 @@ import '../widgets/notched_box.dart';
 import '../widgets/run_log_tile.dart';
 import 'ai_report_screen.dart'; //AI 평가
 import 'course_screen.dart'; //코스 고르기
+import 'player_card_screen.dart'; //플레이어 카드
 import 'profile_screen.dart'; //프로필
 import 'pvp_screen.dart'; //게임 플레잉
 import 'ranking_screen.dart'; //랭킹
@@ -130,7 +131,11 @@ class _MainScreenState extends State<MainScreen> {
                   onGoldSecret: _grantDemo,
                 ),
                 const SizedBox(height: HomeHeader.nameGap),
-                LevelCard(user: user),
+                // 레벨 카드를 누르면 플레이어 카드
+                GestureDetector(
+                  onTap: () => _open(PlayerCardScreen(userId: _userId)),
+                  child: LevelCard(user: user),
+                ),
                 const SizedBox(height: AppSpacing.xl),
                 TotalsRow(user: user),
                 const SizedBox(height: AppSpacing.xl),

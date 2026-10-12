@@ -1,13 +1,16 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:vibration/vibration.dart';
 
 import '../game/character_outfit.dart';
 import '../game/pvp_battle.dart';
+import '../game/run_rules.dart';
 import '../models/ranking_entry.dart';
 import '../models/user_model.dart';
 import '../services/ranking_repository.dart';
+import '../services/sound_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/character_view.dart';
 import '../widgets/notched_box.dart';
@@ -15,30 +18,97 @@ import '../widgets/notched_box.dart';
 // ============================================================
 // 게임 플레잉(PVP)
 //
-// 상대 고르기 -> 자동 대결 화면.
-// 상대는 랭킹 목록(leaderboard)에서 고릅니다. 내 레벨과 가까운 사람부터 보여줍니다.
+// [자동 매칭] -> 찾는 중 화면 -> 상대를 찾으면 자동 대결 화면.
+// 상대는 랭킹 목록(leaderboard)에서 나와 같은 등급(브론즈·실버·골드…)인 사람 중에서
+// 무작위로 고릅니다. 같은 등급에 아무도 없으면 한 등급씩 아래로 내려가며 찾습니다.
 // 대결 규칙과 능력치 계산은 game/pvp_battle.dart에 있습니다.
 // ============================================================
-class PvpScreen extends StatefulWidget {
+class PvpScreen extends StatelessWidget {
   final String userId;
   final UserModel user;
 
   const PvpScreen({super.key, required this.userId, required this.user});
 
+  Fighter get _me => Fighter(
+    id: userId,
+    name: user.nickname,
+    level: user.level,
+    totalKm: user.totalDistance / 1000,
+  );
+
   @override
-  State<PvpScreen> createState() => _PvpScreenState();
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Scaffold(
+      appBar: AppBar(title: const Text('게임 플레잉')),
+      body: ListView(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        children: [
+          _MyFighterCard(fighter: _me),
+          const SizedBox(height: AppSpacing.lg),
+          Text(
+            '같은 등급(${RunRules.tierName(user.level)})끼리만 겨뤄요. '
+            '연습 대결이라 이겨도 골드는 받지 않아요.',
+            style: textTheme.labelMedium,
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          SizedBox(
+            height: 56,
+            child: ElevatedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      MatchingScreen(userId: userId, user: user, me: _me),
+                ),
+              ),
+              icon: const Icon(Icons.bolt),
+              label: const Text('자동 매칭'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class _PvpScreenState extends State<PvpScreen> {
-  late final Stream<List<RankingEntry>> _board = RankingRepository.instance
-      .watchTop(RankingKind.level);
+// ============================================================
+// 찾는 중 화면
+//
+// 같은 등급 사람을 불러오는 동안 "상대를 찾는 중"을 보여줍니다. 너무 빨리 끝나면
+// 찾는 느낌이 안 나서 최소 2.5초는 보여줍니다. 찾으면 잠깐 상대를 보여주고 대결로 넘어갑니다.
+// ============================================================
+class MatchingScreen extends StatefulWidget {
+  final String userId;
+  final UserModel user;
+  final Fighter me;
 
-  Fighter get _me => Fighter(
-    id: widget.userId,
-    name: widget.user.nickname,
-    level: widget.user.level,
-    totalKm: widget.user.totalDistance / 1000,
-  );
+  const MatchingScreen({
+    super.key,
+    required this.userId,
+    required this.user,
+    required this.me,
+  });
+
+  @override
+  State<MatchingScreen> createState() => _MatchingScreenState();
+}
+
+enum _MatchState { searching, found, none, failed }
+
+class _MatchingScreenState extends State<MatchingScreen> {
+  static const Duration _minSearch = Duration(milliseconds: 2500);
+  static const Duration _showFound = Duration(milliseconds: 1200);
+
+  _MatchState _state = _MatchState.searching;
+  RankingEntry? _opponent;
+  bool _lowerTier = false; // 같은 등급이 없어서 아래 등급과 붙었는지
+
+  @override
+  void initState() {
+    super.initState();
+    _search();
+  }
 
   static Fighter _fighterOf(RankingEntry entry) => Fighter(
     id: entry.userId,
@@ -47,21 +117,58 @@ class _PvpScreenState extends State<PvpScreen> {
     totalKm: entry.totalDistance / 1000,
   );
 
-  void _challenge(RankingEntry entry) {
-    Navigator.push(
+  Future<void> _search() async {
+    setState(() {
+      _state = _MatchState.searching;
+      _opponent = null;
+    });
+    final Future<void> wait = Future.delayed(_minSearch);
+    // 내 등급부터 찾고, 아무도 없으면 한 등급씩 내려가며 찾습니다.
+    List<RankingEntry> others = const [];
+    _lowerTier = false;
+    try {
+      final List<int> starts = RunRules.tierStarts
+          .where((start) => start <= widget.user.level)
+          .toList()
+          .reversed
+          .toList();
+      for (final int start in starts) {
+        final List<RankingEntry> found = await RankingRepository.instance
+            .sameTier(start == starts.first ? widget.user.level : start);
+        others = found.where((entry) => entry.userId != widget.userId).toList();
+        if (others.isNotEmpty) break;
+        _lowerTier = true;
+      }
+    } catch (_) {
+      await wait;
+      if (mounted) setState(() => _state = _MatchState.failed);
+      return;
+    }
+    await wait;
+    if (!mounted) return;
+    if (others.isEmpty) {
+      setState(() => _state = _MatchState.none);
+      return;
+    }
+    final RankingEntry pick = others[Random().nextInt(others.length)];
+    setState(() {
+      _state = _MatchState.found;
+      _opponent = pick;
+    });
+    await Future.delayed(_showFound);
+    if (!mounted) return;
+    Navigator.pushReplacement(
       context,
       MaterialPageRoute(
         builder: (context) => BattleScreen(
-          challenger: _me,
-          opponent: _fighterOf(entry),
-          challengerParts: CharacterOutfit.partsFor(
-            widget.user.look ?? CharacterLook.female,
-            widget.user.equippedSetId,
-          ),
+          challenger: widget.me,
+          opponent: _fighterOf(pick),
+          challengerParts: widget.user.parts(),
           // 겉모습을 올리기 전의 상대는 여자 기본 옷으로 그립니다.
           opponentParts: CharacterOutfit.partsFor(
-            entry.look ?? CharacterLook.female,
-            entry.equippedSetId,
+            pick.look ?? CharacterLook.female,
+            pick.equippedSetId,
+            dogStage: pick.dogStage,
           ),
         ),
       ),
@@ -71,66 +178,144 @@ class _PvpScreenState extends State<PvpScreen> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final Fighter me = _me;
+    final String tier = RunRules.tierName(widget.user.level);
+    final RankingEntry? opponent = _opponent;
+
+    final Widget body = switch (_state) {
+      _MatchState.searching => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 56,
+            height: 56,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              color: AppColors.accentOnDark,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          const _Dots(text: '상대를 찾는 중'),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            tier,
+            style: textTheme.labelMedium?.copyWith(color: AppColors.sandOnDark),
+          ),
+        ],
+      ),
+      _MatchState.found => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'MATCH!',
+            style: AppTheme.caption.copyWith(color: AppColors.accentOnDark),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            opponent?.nickname ?? '',
+            style: AppTheme.serifNumber.copyWith(
+              fontSize: 30,
+              color: AppColors.white,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          if (_lowerTier) ...[
+            Text(
+              '같은 등급 상대가 없어 아래 등급과 겨뤄요',
+              style: textTheme.labelMedium?.copyWith(
+                color: AppColors.accentOnDark,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+          ],
+          Text(
+            'Lv.${opponent?.level ?? 0} · '
+            '${RunRules.tierName(opponent?.level ?? widget.user.level)}',
+            style: textTheme.labelMedium?.copyWith(color: AppColors.sandOnDark),
+          ),
+        ],
+      ),
+      _MatchState.none || _MatchState.failed => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            _state == _MatchState.none ? '겨룰 상대가 아직 없어요.' : '상대를 불러오지 못했어요.',
+            style: textTheme.bodyLarge?.copyWith(color: AppColors.white),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.white,
+                  side: const BorderSide(color: AppColors.trackOnDark),
+                ),
+                onPressed: () => Navigator.pop(context),
+                child: const Text('돌아가기'),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              ElevatedButton(onPressed: _search, child: const Text('다시 찾기')),
+            ],
+          ),
+        ],
+      ),
+    };
 
     return Scaffold(
-      appBar: AppBar(title: const Text('게임 플레잉')),
-      body: StreamBuilder<List<RankingEntry>>(
-        stream: _board,
-        builder: (context, snapshot) {
-          final List<RankingEntry> entries =
-              (snapshot.data ?? const [])
-                  .where((entry) => entry.userId != widget.userId)
-                  .toList()
-                // 나와 레벨이 비슷한 사람부터
-                ..sort(
-                  (a, b) => (a.level - me.level).abs().compareTo(
-                    (b.level - me.level).abs(),
-                  ),
-                );
-
-          return ListView(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            children: [
-              _MyFighterCard(fighter: me),
-              const SizedBox(height: AppSpacing.lg),
-              Text(
-                '연습 대결이에요. 이겨도 골드는 받지 않아요. '
-                '같은 상대와는 하루 동안 결과가 같아요.',
-                style: textTheme.labelMedium,
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Text('상대 고르기', style: textTheme.titleLarge),
-              const SizedBox(height: AppSpacing.sm),
-              if (snapshot.connectionState == ConnectionState.waiting)
-                const Padding(
-                  padding: EdgeInsets.all(AppSpacing.xl),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (entries.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
-                  child: Text(
-                    '아직 겨룰 상대가 없어요. 친구에게 달리랑을 알려주세요!',
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: AppColors.mute,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                )
-              else
-                for (final entry in entries) ...[
-                  _OpponentTile(
-                    fighter: _fighterOf(entry),
-                    myPower: me.power,
-                    onChallenge: () => _challenge(entry),
-                  ),
-                  const Divider(),
-                ],
-            ],
-          );
-        },
+      backgroundColor: AppColors.black,
+      appBar: AppBar(
+        backgroundColor: AppColors.black,
+        foregroundColor: AppColors.white,
+        surfaceTintColor: Colors.transparent,
+        title: const Text('자동 매칭', style: TextStyle(color: AppColors.white)),
       ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: body,
+        ),
+      ),
+    );
+  }
+}
+
+// "상대를 찾는 중." -> ".." -> "..." 를 되풀이합니다.
+class _Dots extends StatefulWidget {
+  final String text;
+
+  const _Dots({required this.text});
+
+  @override
+  State<_Dots> createState() => _DotsState();
+}
+
+class _DotsState extends State<_Dots> {
+  int _count = 1;
+  late final Timer _timer = Timer.periodic(
+    const Duration(milliseconds: 400),
+    (_) => setState(() => _count = _count % 3 + 1),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _timer;
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      '${widget.text}${'.' * _count}${' ' * (3 - _count)}',
+      style: Theme.of(
+        context,
+      ).textTheme.titleLarge?.copyWith(color: AppColors.white),
     );
   }
 }
@@ -209,66 +394,6 @@ class _MyFighterCard extends StatelessWidget {
   }
 }
 
-class _OpponentTile extends StatelessWidget {
-  final Fighter fighter;
-  final int myPower;
-  final VoidCallback onChallenge;
-
-  const _OpponentTile({
-    required this.fighter,
-    required this.myPower,
-    required this.onChallenge,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final int gap = fighter.power - myPower;
-    final String hint = gap > 15
-        ? '강한 상대'
-        : gap < -15
-        ? '해볼 만한 상대'
-        : '비슷한 상대';
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  fighter.name,
-                  style: textTheme.titleMedium,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Lv.${fighter.level} · ${fighter.totalKm.toStringAsFixed(1)}km · '
-                  '전투력 ${fighter.power} · $hint',
-                  style: textTheme.labelMedium,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.sm,
-              ),
-            ),
-            onPressed: onChallenge,
-            child: const Text('대결'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ============================================================
 // 대결 화면 - 계산은 한 번에 끝내 두고, 한 차례씩 보여줍니다.
 // 가운데 3D에서 두 캐릭터가 마주 보고, 차례마다 치고 맞습니다.
@@ -324,11 +449,24 @@ class _BattleScreenState extends State<BattleScreen> {
     }
     final BattleTurn turn = _result.turns[_shown];
     setState(() => _shown++);
+    _playSounds(turn);
     if (turn.critical) _buzz(60);
     if (_finished) {
       _timer?.cancel();
       _buzz(_result.challengerWon ? 300 : 120);
     }
+  }
+
+  // 치는 순간 "휙퍽", 주먹이 닿을 때(뷰어의 IMPACT, 약 0.35초 뒤) 맞으면 "퍽", 피하면 "휙"
+  static const Duration _impact = Duration(milliseconds: 330);
+
+  void _playSounds(BattleTurn turn) {
+    SoundService.instance.play(Sfx.punch);
+    final bool landed = !turn.dodged && turn.damage > 0;
+    Future.delayed(_impact, () {
+      if (!mounted) return;
+      SoundService.instance.play(landed ? Sfx.hit : Sfx.whoosh);
+    });
   }
 
   // 결과를 바로 보고 싶을 때
@@ -416,13 +554,11 @@ class _BattleScreenState extends State<BattleScreen> {
                 ],
               ),
             ),
+            // 끝나면 버튼 없이 결과만 둡니다. (나갈 때는 위의 뒤로 가기)
             SizedBox(
               height: 52,
               child: _finished
-                  ? ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('다른 상대 고르기'),
-                    )
+                  ? null
                   : OutlinedButton(
                       onPressed: _skip,
                       child: const Text('결과 바로 보기'),

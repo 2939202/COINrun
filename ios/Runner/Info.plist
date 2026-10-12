@@ -11,7 +11,7 @@
 	<key>NSMotionUsageDescription</key>
 	<string>걸음 수만큼 골드를 모으기 위해 동작 및 피트니스 정보가 필요해요.</string>
 	<key>CFBundleDisplayName</key>
-	<string>Contact</string>
+	<string>코인런</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
+import '../services/sound_service.dart';
 import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/map_tiles.dart';
@@ -100,6 +102,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Divider(),
 
           // ------------------------------------------------------------
+          // 소리 - 게임 플레잉 대결의 때리는 소리·맞는 소리 (이 폰에만 저장)
+          // ------------------------------------------------------------
+          const SettingsSectionHeader(title: '소리'),
+          const _VolumeTile(),
+          const Divider(),
+
+          // ------------------------------------------------------------
           // 앱 정보 및 서비스 관리 섹션
           // ------------------------------------------------------------
           const SettingsSectionHeader(title: '앱 정보'),
@@ -124,7 +133,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
               builder: (context) => const _PrivacyDialog(),
             ),
           ),
+          // 맨 아래: 문의·건의 메일. 누르면 주소를 복사합니다.
+          ListTile(
+            leading: const Icon(Icons.mail_outline),
+            title: const Text('문의·건의'),
+            subtitle: const Text(_contactEmail),
+            trailing: const Icon(Icons.copy, size: 18),
+            onTap: () {
+              Clipboard.setData(const ClipboardData(text: _contactEmail));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('메일 주소를 복사했어요')));
+            },
+          ),
         ],
+      ),
+    );
+  }
+}
+
+const String _contactEmail = 'spot7kingdom@gmail.com';
+
+// 효과음 볼륨 (0~100%). 끌면 바로 저장되고, 손을 떼면 "퍽" 소리로 들려줍니다.
+class _VolumeTile extends StatefulWidget {
+  const _VolumeTile();
+
+  @override
+  State<_VolumeTile> createState() => _VolumeTileState();
+}
+
+class _VolumeTileState extends State<_VolumeTile> {
+  @override
+  void initState() {
+    super.initState();
+    SoundService.instance.load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<double>(
+      valueListenable: SoundService.instance.volume,
+      builder: (context, volume, _) => ListTile(
+        leading: Icon(
+          volume <= 0 ? Icons.volume_off_outlined : Icons.volume_up_outlined,
+        ),
+        title: const Text('효과음 볼륨'),
+        subtitle: Slider(
+          value: volume,
+          divisions: 20,
+          activeColor: AppColors.black,
+          inactiveColor: AppColors.sand,
+          label: '${(volume * 100).round()}%',
+          onChanged: (value) => SoundService.instance.volume.value = value,
+          onChangeEnd: (value) async {
+            await SoundService.instance.setVolume(value);
+            await SoundService.instance.play(Sfx.hit);
+          },
+        ),
+        trailing: Text(
+          '${(volume * 100).round()}%',
+          style: AppTheme.number.copyWith(fontSize: 14),
+        ),
       ),
     );
   }

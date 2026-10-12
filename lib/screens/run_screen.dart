@@ -18,6 +18,7 @@ import '../models/course.dart';
 import '../models/equipment_set.dart';
 import '../models/run_record.dart';
 import '../models/user_model.dart';
+import '../services/sound_service.dart';
 import '../services/app_permissions.dart';
 import '../services/course_repository.dart';
 import '../services/location_service.dart';
@@ -31,6 +32,7 @@ import '../widgets/home_widgets.dart' show DoubleRule, TotalBlock;
 import '../widgets/gold_coin.dart';
 import '../widgets/map_tiles.dart';
 import '../widgets/run_app_bar.dart';
+import '../widgets/treasure_map.dart';
 import 'course_screen.dart';
 import 'run_report.dart';
 
@@ -269,6 +271,7 @@ class _RunScreenState extends State<RunScreen> {
       _currentPosition = newPosition;
       _tracker.addPosition(newPosition, DateTime.now());
     });
+    _checkGold(); // 걸음 센서가 없으면 거리로 걸음을 세서, 위치가 바뀔 때도 봅니다.
     _moveMap(newPosition);
     if (_tracker.lastWasTooFast) {
       _warnTooFast();
@@ -293,6 +296,19 @@ class _RunScreenState extends State<RunScreen> {
     );
   }
 
+  // 일반 러닝: 걸음으로 골드가 오를 때마다 오른 만큼 띠링. (코스 러닝은 코인을 먹을 때 울립니다)
+  // 장비 보너스는 끝나고 정산할 때 붙어서 여기서는 기본 골드로만 셉니다.
+  int _goldHeard = 0;
+
+  void _checkGold() {
+    if (_coins != null || _tracker.state != RunState.running) return;
+    final int gold = RunRules.goldFor(_tracker.record);
+    if (gold > _goldHeard) {
+      SoundService.instance.playCoins(gold - _goldHeard);
+      _goldHeard = gold;
+    }
+  }
+
   // 달리는 중에만 코인을 먹습니다. 일시정지 중에 걸어가서 먹으면 안 됩니다.
   void _checkCoins(LatLng position) {
     final CourseCoins? coins = _coins;
@@ -305,6 +321,7 @@ class _RunScreenState extends State<RunScreen> {
 
     if (update.collected > 0) {
       _buzz(const [0, 90]);
+      SoundService.instance.playCoins(update.collected); // 먹은 코인만큼 띠링
     } else if (update.passed > 0) {
       // 왕복 코스의 가는 길: 아직 못 먹는다는 뜻으로 짧게 두 번
       _buzz(const [0, 35, 70, 35]);
@@ -364,10 +381,10 @@ class _RunScreenState extends State<RunScreen> {
       }
       return;
     }
-    _stepSubscription = StepService.stepCountStream().listen(
-      (steps) => setState(() => _tracker.addSensorSteps(steps)),
-      onError: (Object error) => debugPrint('걸음 센서 오류: $error'),
-    );
+    _stepSubscription = StepService.stepCountStream().listen((steps) {
+      setState(() => _tracker.addSensorSteps(steps));
+      _checkGold();
+    }, onError: (Object error) => debugPrint('걸음 센서 오류: $error'));
   }
 
   // ----------------------------------------------------------
@@ -380,6 +397,7 @@ class _RunScreenState extends State<RunScreen> {
       _lastFixAt = null;
       // 아직 GPS를 못 잡았으면 null을 넘깁니다. 기본 좌표(서울 시청)를 출발점으로 쓰면
       // 첫 위치가 들어올 때 거기까지가 한 번에 뛴 것으로 계산돼 통째로 버려집니다.
+      _goldHeard = 0;
       _tracker.start(_currentPosition, DateTime.now());
       _coins = _freshCoins();
     });
@@ -766,7 +784,8 @@ class _RunScreenState extends State<RunScreen> {
             },
           ),
           children: [
-            ...MapTiles.layers(),
+            // 러닝 지도는 보물 지도처럼 양피지색입니다. (테두리는 아래 TreasureMapOverlay)
+            ...MapTiles.treasureLayers(),
             // 고른 코스는 절취선 같은 점선으로 깔아 둡니다. 반투명이지만 진해서 색을 뺀
             // 지도 위에서도 또렷하고, 그 위를 지나간 내 경로(검은 실선)와 구분됩니다.
             if (_course != null) ...[
@@ -780,9 +799,13 @@ class _RunScreenState extends State<RunScreen> {
                   ),
                 ],
               ),
+              // 코인은 지도 확대 정도를 보고 그려서 따로 둡니다. (멀리서 보면 점으로)
+              Builder(
+                builder: (context) =>
+                    MarkerLayer(markers: _coinMarkers(MapCamera.of(context))),
+              ),
               MarkerLayer(
                 markers: [
-                  ..._coinMarkers(),
                   Marker(
                     point: _course!.points.last,
                     width: 22,
@@ -826,6 +849,8 @@ class _RunScreenState extends State<RunScreen> {
             ),
           ],
         ),
+        // 가장자리가 탄 종이처럼 어두워지는 비네팅과 옅은 종이 결
+        const Positioned.fill(child: TreasureMapOverlay()),
         // 진단 줄은 지도 위에 얹습니다. 아래 패널에 넣으면 화면이 좁아서 잘립니다.
         if (_devMode)
           Positioned(
@@ -881,23 +906,40 @@ class _RunScreenState extends State<RunScreen> {
     );
   }
 
+  // 코인 사이가 화면에서 이만큼(px)보다 가까우면 코인 대신 작은 점으로 그립니다.
+  // 멀리서 보면 코인이 겹쳐서 지네처럼 보이기 때문입니다.
+  static const double _coinDotSpacing = 22;
+
+  // 지금 확대 정도에서 이웃한 코인 사이가 화면에서 몇 px인지 (첫 두 코인으로 잽니다)
+  static double _coinSpacingPx(CourseCoins coins, MapCamera camera) {
+    if (coins.coins.length < 2) return double.infinity;
+    final LatLng a = coins.coins[0], b = coins.coins[1];
+    final double meters = const Distance().as(LengthUnit.Meter, a, b);
+    // 웹 지도에서 1px이 몇 m인지 (위도와 확대 정도에 따라 다릅니다)
+    final double metersPerPx =
+        156543.03392 * cos(a.latitude * pi / 180) / pow(2, camera.zoom);
+    return meters / metersPerPx;
+  }
+
   // 아직 안 먹은 코인. 왕복 코스에서 반환점을 찍기 전에는 흐리게 보여서
   // "지금은 못 먹는다"를 알려줍니다.
-  List<Marker> _coinMarkers() {
+  List<Marker> _coinMarkers(MapCamera camera) {
     final CourseCoins? coins = _coins;
     if (coins == null) return const [];
     final bool locked = coins.isRoundTrip && !coins.turned;
     final LatLng? turn = coins.turnPoint;
+    final bool dots = _coinSpacingPx(coins, camera) < _coinDotSpacing;
+    final double size = dots ? 7 : 18;
     return [
       for (int i = 0; i < coins.coins.length; i++)
         if (!coins.isCollected(i))
           Marker(
             point: coins.coins[i],
-            width: 18,
-            height: 18,
+            width: size,
+            height: size,
             child: Opacity(
               opacity: locked ? 0.5 : 1,
-              child: const GoldCoin(size: 18),
+              child: dots ? const _CoinDot() : const GoldCoin(size: 18),
             ),
           ),
       if (turn != null && !coins.turned)
@@ -1446,6 +1488,22 @@ class _CourseNameDialogState extends State<_CourseNameDialog> {
 }
 
 // 왕복 코스의 반환점. 여기를 찍어야 코인을 먹기 시작합니다.
+// 멀리서 볼 때의 코인: 작은 금색 점 (짙은 테두리를 둘러 양피지 위에서도 보이게)
+class _CoinDot extends StatelessWidget {
+  const _CoinDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.gold,
+        border: Border.all(color: GoldColors.edge, width: 1),
+      ),
+    );
+  }
+}
+
 class _TurnMark extends StatelessWidget {
   const _TurnMark();
 
@@ -1524,6 +1582,7 @@ class _CourseChip extends StatelessWidget {
 }
 
 // 나침반. 폰의 방향 센서를 읽어서 바늘이 실제 북쪽을 가리킵니다.
+// 모양은 러닝 지도와 같은 양피지·먹색 톤의 깔끔한 나침반입니다.
 // 폰을 돌리면 바늘이 반대로 돌아 북쪽에 머뭅니다.
 //
 // 센서가 없는 기종(일부 저가폰, 에뮬레이터)에서는 바늘이 위를 향한 채 멈춰 있고
@@ -1577,63 +1636,200 @@ class _CompassState extends State<_Compass> {
 
   @override
   Widget build(BuildContext context) {
+    // 바깥 테와 위쪽 기준 표시는 그대로 두고, 안쪽 문자판만 돌립니다.
+    // 문자판의 N이 늘 실제 북쪽을 가리키는 옛날 나침반 방식입니다.
     return GestureDetector(
       onTap: widget.onTap,
       behavior: HitTestBehavior.opaque,
-      child: Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          shape: BoxShape.circle,
-          border: Border.all(color: AppColors.black, width: 1.4),
-        ),
-        child: AnimatedRotation(
-          turns: _turns,
-          duration: const Duration(milliseconds: 180),
-          child: CustomPaint(painter: _NeedlePainter(hasSensor: _hasSensor)),
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: CustomPaint(
+          painter: const _CompassCasePainter(),
+          child: Padding(
+            padding: const EdgeInsets.all(5),
+            child: AnimatedRotation(
+              turns: _turns,
+              duration: const Duration(milliseconds: 180),
+              child: CustomPaint(
+                painter: _CompassCardPainter(hasSensor: _hasSensor),
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-// 위쪽 검은 바늘(북) + 아래쪽 옅은 바늘(남)
-class _NeedlePainter extends CustomPainter {
-  final bool hasSensor;
+// 나침반 색. 러닝 지도(연한 양피지 + 흐린 고동색 먹)와 같은 톤으로 맞춥니다.
+// 금색·쨍한 색은 쓰지 않습니다.
+class _CompassInk {
+  _CompassInk._();
 
-  const _NeedlePainter({required this.hasSensor});
+  static const Color paper = Color(0xFFFBF4E4); // 문자판 가운데
+  static const Color paperEdge = Color(0xFFEEE2C8); // 문자판 가장자리
+  static const Color ink = Color(0xFF4A423A); // 테, 눈금, 글자
+  static const Color inkSoft = Color(0xFF8C8172); // 작은 눈금, E·S·W
+  static const Color accent = Color(0xFF8E5B4B); // 바늘 북쪽 (바랜 적갈색)
+}
+
+// 바깥 테 (돌지 않음)
+//   부드러운 그림자 + 크림색 바탕 + 얇은 먹색 테 두 줄 + 맨 위 기준 표시(작은 삼각형)
+class _CompassCasePainter extends CustomPainter {
+  const _CompassCasePainter();
 
   @override
   void paint(Canvas canvas, Size size) {
     final Offset c = size.center(Offset.zero);
-    const double length = 13;
-    const double half = 4.5;
-    final Path north = Path()
+    final double r = size.shortestSide / 2 - 1;
+    // 지도 위에서 떠 보이게 은은한 그림자
+    canvas.drawCircle(
+      c.translate(0, 1.5),
+      r,
+      Paint()
+        ..color = const Color(0x40322A22)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.2),
+    );
+    canvas.drawCircle(c, r, Paint()..color = _CompassInk.paperEdge);
+    // 바깥 테: 굵은 선 하나 + 안쪽 가는 선 하나
+    canvas.drawCircle(
+      c,
+      r - 0.7,
+      Paint()
+        ..color = _CompassInk.ink
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4,
+    );
+    canvas.drawCircle(
+      c,
+      r - 3.2,
+      Paint()
+        ..color = _CompassInk.ink.withValues(alpha: 0.55)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.5,
+    );
+    // 기준 표시: 폰 위쪽(가는 방향)
+    final Path lubber = Path()
+      ..moveTo(c.dx, c.dy - r + 3.6)
+      ..lineTo(c.dx - 2.2, c.dy - r - 0.2)
+      ..lineTo(c.dx + 2.2, c.dy - r - 0.2)
+      ..close();
+    canvas.drawPath(lubber, Paint()..color = _CompassInk.ink);
+  }
+
+  @override
+  bool shouldRepaint(_CompassCasePainter oldDelegate) => false;
+}
+
+// 도는 문자판: 크림색 종이, 고운 눈금, 세리프 N과 작은 E·S·W, 가는 바늘
+//   바늘 북쪽 반은 바랜 적갈색, 남쪽 반은 속이 빈 먹색 선
+class _CompassCardPainter extends CustomPainter {
+  final bool hasSensor;
+
+  const _CompassCardPainter({required this.hasSensor});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Offset c = size.center(Offset.zero);
+    final double r = size.shortestSide / 2;
+    final Rect box = Rect.fromCircle(center: c, radius: r);
+
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..shader = const RadialGradient(
+          colors: [_CompassInk.paper, _CompassInk.paperEdge],
+        ).createShader(box),
+    );
+
+    // 눈금: 10도마다 아주 짧게, 30도마다 조금 길게 (동서남북 자리는 글자)
+    for (int i = 0; i < 36; i++) {
+      if (i % 9 == 0) continue;
+      final bool major = i % 3 == 0;
+      final double a = i * pi / 18;
+      final Offset dir = Offset(sin(a), -cos(a));
+      canvas.drawLine(
+        c + dir * (r - (major ? 2.6 : 1.5)),
+        c + dir * (r - 0.3),
+        Paint()
+          ..color = major ? _CompassInk.ink : _CompassInk.inkSoft
+          ..strokeWidth = major ? 0.6 : 0.4,
+      );
+    }
+
+    // N은 크게, E·S·W는 작고 흐리게. 문자판과 같이 돌아서 N이 늘 북쪽입니다.
+    const List<String> letters = ['N', 'E', 'S', 'W'];
+    for (int i = 0; i < 4; i++) {
+      final bool isNorth = i == 0;
+      final TextPainter label = TextPainter(
+        text: TextSpan(
+          text: letters[i],
+          style: AppTheme.serifNumber.copyWith(
+            fontSize: isNorth ? 7.5 : 5.2,
+            height: 1,
+            color: isNorth ? _CompassInk.ink : _CompassInk.inkSoft,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final double a = i * pi / 2;
+      final Offset at = c + Offset(sin(a), -cos(a)) * (r - 4.4);
+      canvas.save();
+      canvas.translate(at.dx, at.dy);
+      canvas.rotate(a);
+      label.paint(canvas, Offset(-label.width / 2, -label.height / 2));
+      canvas.restore();
+    }
+
+    // 가는 바늘
+    const double length = 10;
+    const double half = 2.1;
+    final Path northHalf = Path()
       ..moveTo(c.dx, c.dy - length)
       ..lineTo(c.dx + half, c.dy)
       ..lineTo(c.dx - half, c.dy)
       ..close();
-    final Path south = Path()
+    final Path southHalf = Path()
       ..moveTo(c.dx, c.dy + length)
       ..lineTo(c.dx + half, c.dy)
       ..lineTo(c.dx - half, c.dy)
       ..close();
-    canvas.drawPath(south, Paint()..color = AppColors.sand);
-    canvas.drawPath(north, Paint()..color = AppColors.black);
-    // 센서가 없으면 가운데를 빈 원으로 그려서 "진짜 방향이 아님"을 알립니다.
+    canvas.drawPath(southHalf, Paint()..color = _CompassInk.paper);
+    canvas.drawPath(
+      southHalf,
+      Paint()
+        ..color = _CompassInk.ink
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.6
+        ..strokeJoin = StrokeJoin.round,
+    );
+    canvas.drawPath(northHalf, Paint()..color = _CompassInk.accent);
+    // 바늘 북쪽 반의 한쪽 면만 어둡게 해서 입체감
+    final Path northShade = Path()
+      ..moveTo(c.dx, c.dy - length)
+      ..lineTo(c.dx + half, c.dy)
+      ..lineTo(c.dx, c.dy)
+      ..close();
+    canvas.drawPath(northShade, Paint()..color = const Color(0x33000000));
+
+    // 축. 센서가 없으면 빈 원으로 그려서 "진짜 방향이 아님"을 알립니다.
     canvas.drawCircle(
       c,
-      hasSensor ? 1.6 : 2.6,
+      hasSensor ? 1.5 : 2.2,
       Paint()
-        ..color = AppColors.white
+        ..color = _CompassInk.ink
         ..style = hasSensor ? PaintingStyle.fill : PaintingStyle.stroke
-        ..strokeWidth = 1.2,
+        ..strokeWidth = 0.9,
     );
+    if (hasSensor) {
+      canvas.drawCircle(c, 0.6, Paint()..color = _CompassInk.paper);
+    }
   }
 
   @override
-  bool shouldRepaint(_NeedlePainter oldDelegate) =>
+  bool shouldRepaint(_CompassCardPainter oldDelegate) =>
       oldDelegate.hasSensor != hasSensor;
 }
 

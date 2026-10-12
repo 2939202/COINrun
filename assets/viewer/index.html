@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
-  canvas { display: block; width: 100%; height: 100%; touch-action: pan-y; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 </style>
 <script>
   // 모듈 스크립트가 뜨기도 전에 난 오류도 앱에 알립니다. (앱은 "보이지 않아요"를 띄웁니다)
@@ -30,19 +30,28 @@
 //   ?me=...&foe=womanHEAD,armor         게임 플레잉 대결. 두 명이 마주 봅니다.
 //   ?me=...&foe=...&pair=1              캐릭터 고르기. 두 명이 나란히 앞을 봅니다.
 //   ?me=...&face=1                      홈 카드. 얼굴만 크게 보입니다.
+//   ?guild=1&me=...&friends=a,b;c,d     나의 길드. 내 캐릭터는 조이스틱으로 걷고 뛰며,
+//                                       친구들(; 로 구분)은 혼자 돌아다닙니다. 배경은 앱이 깝니다.
+//   ?me=dog:husky:2                     강아지 캐릭터. dog:종류:단계(1~3)
+//                                       사람 대신 강아지가 섭니다. 옷 대신 단계마다 그림체가 바뀝니다.
 //
 // 그림체: 작은 화면에 그린 다음 네모 픽셀 그대로 키워서 픽셀 느낌을 내고,
 // 캐릭터 위에만 잔잔한 노이즈를 깔아 자글자글하게 합니다. (아래 "필터")
 //
 // 앱 → 뷰어:  setFighters(['head',...], ['womanHEAD',...] 또는 null)
 //             strike(true=내가 침, landed=맞았는지)
-// 손가락:     내 캐릭터 화면에서 가로로 끌면 돌고, 빠르게 두 번 치면 붉어지며 콩콩 뜁니다.
+//             setGuild(['head',...], [['womanHEAD',...], ...])   setMove(x, y)  (길드)
+// 손가락:     내 캐릭터 화면에서 가로로 끌면 돌고, 두 손가락으로 벌리면 28%까지 커집니다.
 // 뷰어 → 앱:  Flutter.postMessage('ready' | 'error:...')
 //
-// 숨쉬기·때리기·맞기는 뼈대 없이 캐릭터 전체를 움직여서 만듭니다. 발바닥이 기준점입니다.
+// 모델에는 뼈(Mixamo)와 동작이 들어 있습니다. (idle, fightIdle, punch, hit, run, walk)
+//   내 캐릭터 화면: 동작 없이 서서 숨만 쉽니다. (숨쉬기는 몸 전체를 살짝 늘였다 줄여서)
+//   대결: fightIdle로 들썩이다가, 칠 때 punch, 맞을 때 hit를 짧게 잘라 빠르게 틉니다.
+//         피하기는 동작 파일이 없어서 몸 전체를 옆으로 옮겨 만듭니다.
 // ============================================================
 import * as THREE from 'three';
 import { GLTFLoader } from './GLTFLoader.js';
+import { clone as cloneSkinned } from './SkeletonUtils.js';
 
 const params = new URLSearchParams(location.search);
 const send = (message) => window.Flutter?.postMessage(message);
@@ -67,6 +76,8 @@ scene.add(key);
 const rim = new THREE.DirectionalLight(0xfff1dc, 0.7);
 rim.position.set(-2, 1.5, -2);
 scene.add(rim);
+for (const light of [key, rim]) light.layers.enableAll();
+scene.traverse((object) => { if (object.isLight) object.layers.enableAll(); });
 
 // ---------- 필터 ----------
 // 1) 캐릭터를 작은 그림(low)에 그립니다. 픽셀 한 칸 = 화면 PIXEL px
@@ -83,6 +94,7 @@ const filter = new THREE.ShaderMaterial({
     image: { value: low.texture },
     size: { value: new THREE.Vector2(1, 1) },
     seed: { value: 0 },
+    sat: { value: 1 }, // 채도. 0이면 흑백 (강아지 1단계)
   },
   vertexShader: `
     varying vec2 vUv;
@@ -91,6 +103,7 @@ const filter = new THREE.ShaderMaterial({
     uniform sampler2D image;
     uniform vec2 size;
     uniform float seed;
+    uniform float sat;
     varying vec2 vUv;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233)) + seed) * 43758.5453); }
     void main() {
@@ -99,6 +112,7 @@ const filter = new THREE.ShaderMaterial({
       // 화면 밝기(sRGB)로 바꾼 뒤에 노이즈를 얹어야 어두운 옷에서 튀지 않습니다.
       vec3 col = pow(max(c.rgb, 0.0), vec3(1.0 / 2.2));
       col += (hash(cell) - 0.5) * 0.07;
+      col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, sat);
       col = floor(col * 24.0 + 0.5) / 24.0;
       gl_FragColor = vec4(clamp(col, 0.0, 1.0), c.a);
     }`,
@@ -110,34 +124,210 @@ const screen = new THREE.Scene();
 screen.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), filter));
 const screenCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
+// 모델 안의 파츠 이름 (lib/game/character_outfit.dart와 같아야 합니다)
+const PART_NAMES = new Set(['head', 'womanHEAD', 'woman', 'ArmLeg', 'basic', 'fabric', 'leather', 'armor']);
+
+// ---------- 강아지 캐릭터 ----------
+// 사람과 다른 방식입니다. 옷이 없고, 간식을 먹은 만큼 단계가 오르며 그림체가 바뀝니다.
+//   1단계: 아주 큰 픽셀, 흑백   2단계: 큰 픽셀, 흑백   3단계: 고운 픽셀, 색은 반쯤만
+//   (원래 색 그대로는 리트리버가 너무 진해서, 다 자라도 색을 반쯤만 씁니다)
+// 동작 파일이 없어서 몸 전체를 살짝 늘였다 줄여 숨만 쉽니다. (대결 동작도 몸 전체로)
+const DOG_FILES = { husky: '../models/dog_husky.glb', golden: '../models/dog_golden.glb' };
+const DOG_STAGES = {
+  1: { pixel: 11, sat: 0 },
+  2: { pixel: 7, sat: 0 },
+  3: { pixel: 2, sat: 0.55 },
+};
+// 사람과 같이 설 때 강아지 키 (사람 키 대비)
+const DOG_VS_HUMAN = 0.55;
+const dogSources = {}; // 종류 -> 읽어 온 모델 (한 번만 읽습니다)
+const dogLoading = {};
+// 'dog:husky:2' -> { breed: 'husky', stage: 2 }. 사람이면 null
+function dogOf(parts) {
+  if (!parts || parts.length !== 1 || !parts[0].startsWith('dog:')) return null;
+  const [, breed, stage] = parts[0].split(':');
+  return DOG_FILES[breed] ? { breed, stage: DOG_STAGES[Number(stage)] ? Number(stage) : 1 } : null;
+}
+function loadDog(breed) {
+  dogLoading[breed] ??= new Promise((resolve, reject) => new GLTFLoader().load(
+    DOG_FILES[breed], (gltf) => { dogSources[breed] = gltf.scene; resolve(); }, undefined, reject));
+  return dogLoading[breed];
+}
+
+// 대결 한 턴은 0.65초라서 Mixamo 동작에서 쓸 구간만 잘라 빠르게 틉니다. (30fps 기준 프레임)
+//   punch: 18~44 (뒤로 당겼다가 33쯤에 주먹이 닿음)   hit: 4~46 (뒤로 젖혔다가 돌아옴)
+const SHOTS = {
+  attack: { clip: 'punch', from: 18, to: 44, speed: 1.5 },
+  hit: { clip: 'hit', from: 4, to: 46, speed: 2.2 },
+};
+// 치기 시작해서 주먹이 닿을 때까지 (초). 맞는 쪽은 이만큼 늦게 움찔합니다.
+const IMPACT = (33 - 18) / 30 / 1.5;
+
 const ease = (x) => 1 - Math.pow(1 - Math.min(Math.max(x, 0), 1), 3);
 const red = new THREE.Color(0xd33a2a);
 
 // ---------- 캐릭터 한 명 ----------
 // stand: 서 있는 자리와 방향, rig: 동작을 거는 곳, model: 파일에서 읽은 파츠 묶음
+let nextLayer = 1; // 그림체가 다른 캐릭터마다 레이어를 하나씩 씁니다.
+
 class Figure {
-  constructor(source) {
+  constructor(source, clips, breed = null) {
+    this.breed = breed; // 강아지면 종류, 사람이면 null
     this.stand = new THREE.Group();
     this.rig = new THREE.Group();
-    this.model = source.clone();
-    this.model.traverse((object) => {
-      // 머티리얼을 캐릭터마다 따로 둬서 한 명이 맞을 때 다른 사람까지 붉어지지 않게 합니다.
-      if (object.isMesh) object.material = object.material.clone();
-    });
+    this.sizer = new THREE.Group(); // 강아지를 사람 옆에 세울 때 크기를 맞춥니다.
+    // 뼈가 있는 모델은 그냥 clone()하면 뼈가 원본을 따라가서 SkeletonUtils로 복사합니다.
+    this.model = cloneSkinned(source);
     this.parts = {};
-    for (const child of this.model.children) this.parts[child.name] = child;
-    this.rig.add(this.model);
+    this.model.traverse((object) => {
+      if (!object.isMesh) return;
+      // 머티리얼을 캐릭터마다 따로 둬서 한 명이 맞을 때 다른 사람까지 붉어지지 않게 합니다.
+      object.material = object.material.clone();
+      // 움직이면 처음 상자 밖으로 나가서 잘릴 수 있어 화면 밖 잘라내기를 끕니다.
+      object.frustumCulled = false;
+      if (PART_NAMES.has(object.name)) this.parts[object.name] = object;
+    });
+    this.mixer = new THREE.AnimationMixer(this.model);
+    this.clips = Object.fromEntries(clips.map((clip) => [clip.name, clip]));
+    this.base = null; // 늘 틀어 두는 동작 (대결의 fightIdle)
+    this.shots = {};
+    for (const [name, shot] of Object.entries(SHOTS)) {
+      const clip = this.clips[shot.clip];
+      if (!clip) continue;
+      const action = this.mixer.clipAction(
+        THREE.AnimationUtils.subclip(clip, name, shot.from, shot.to, 30));
+      action.setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = true;
+      action.timeScale = shot.speed;
+      this.shots[name] = action;
+    }
+    // 한 번 트는 동작이 끝나면 늘 틀던 동작으로 부드럽게 돌아갑니다.
+    this.mixer.addEventListener('finished', (e) => {
+      if (!this.base) return;
+      this.base.enabled = true;
+      this.base.setEffectiveWeight(1);
+      e.action.crossFadeTo(this.base, 0.15, false);
+    });
+    this.sizer.add(this.model);
+    this.rig.add(this.sizer);
     this.stand.add(this.rig);
     scene.add(this.stand);
-    this.height = 1;
-    this.action = null; // { name: 'attack' | 'hit' | 'dodge' | 'poke', start }
+    this.rawHeight = 1;
+    this.layer = 0; // 0이면 기본 그림체로 같이 그립니다.
+    this.action = null; // { name: 'attack' | 'hit' | 'dodge', start }
     this.breath = Math.random() * 3; // 두 사람이 똑같이 숨 쉬지 않게 시작점을 엇갈립니다.
   }
 
+  // 늘 틀어 둘 동작. null이면 동작 없이 서 있습니다.
+  setBase(name) {
+    const clip = name && this.clips[name];
+    if (!clip) {
+      this.mixer.stopAllAction();
+      this.base = null;
+      return;
+    }
+    if (this.base?.getClip() === clip) return;
+    this.base = this.mixer.clipAction(clip);
+    this.base.setLoop(THREE.LoopRepeat, Infinity);
+    // 두 사람이 똑같이 들썩이지 않게 시작점을 엇갈립니다.
+    this.base.time = this.breath;
+    this.base.play();
+  }
+
+  // 길드에서 걷기('walk')·뛰기('run')·멈춤(null). 앞 동작에서 부드럽게 넘어갑니다.
+  // 강아지는 동작 파일이 없어서 움직이는 동안 몸 전체를 통통 튀게 합니다. (update)
+  setMotion(name) {
+    this.moving = Boolean(name);
+    if (this.breed) return;
+    const clip = name && this.clips[name];
+    const next = clip ? this.mixer.clipAction(clip) : null;
+    if (next === this.base) return;
+    this.base?.fadeOut(0.2);
+    if (next) {
+      next.reset();
+      next.setLoop(THREE.LoopRepeat, Infinity);
+      next.fadeIn(0.2);
+      next.play();
+    }
+    this.base = next;
+  }
+
+  // 잘라 둔 동작을 한 번 틉니다.
+  shoot(name) {
+    const shot = this.shots[name];
+    if (!shot) return;
+    for (const other of Object.values(this.shots)) if (other !== shot) other.stop();
+    shot.reset();
+    shot.setEffectiveWeight(1);
+    shot.play();
+    if (this.base) this.base.crossFadeTo(shot, 0.08, false);
+  }
+
+  get height() {
+    return this.rawHeight * this.sizer.scale.y;
+  }
+
+  // 키를 이만큼으로 맞춥니다. (강아지를 사람 옆에 세울 때)
+  setHeight(h) {
+    this.sizer.scale.setScalar(h / this.rawHeight);
+  }
+
   setOutfit(names) {
-    const on = new Set(names);
-    for (const [name, object] of Object.entries(this.parts)) object.visible = on.has(name);
+    if (!this.breed) {
+      const on = new Set(names);
+      for (const [name, object] of Object.entries(this.parts)) object.visible = on.has(name);
+    }
     this.fit();
+  }
+
+  // 강아지 단계 그림체. 기본 그림체와 다르면 따로 작은 그림에 그려서 얹습니다.
+  setStyle(style) {
+    const plain = !style || (style.pixel === PIXEL && style.sat === 1);
+    if (plain) {
+      this.style = null;
+      this.setLayer(0);
+      return;
+    }
+    this.style = style;
+    if (!this.target) {
+      this.target = new THREE.WebGLRenderTarget(1, 1, {
+        minFilter: THREE.NearestFilter,
+        magFilter: THREE.NearestFilter,
+      });
+      // 그림 칸(render target)은 복사할 수 없어서 잠깐 비우고 복사합니다.
+      const image = filter.uniforms.image.value;
+      filter.uniforms.image.value = null;
+      this.material = filter.clone();
+      filter.uniforms.image.value = image;
+      this.material.uniforms.image.value = this.target.texture;
+      this.material.blending = THREE.NormalBlending;
+      this.material.transparent = true;
+      this.screen = new THREE.Scene();
+      this.screen.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material));
+      this.ownLayer = nextLayer++;
+    }
+    this.material.uniforms.sat.value = style.sat;
+    this.setLayer(this.ownLayer);
+    this.resize();
+  }
+
+  setLayer(layer) {
+    this.layer = layer;
+    this.stand.traverse((object) => object.layers.set(layer));
+  }
+
+  resize() {
+    if (!this.style) return;
+    const w = window.innerWidth, h = window.innerHeight;
+    const lw = Math.max(1, Math.round(w / this.style.pixel));
+    const lh = Math.max(1, Math.round(h / this.style.pixel));
+    this.target.setSize(lw, lh);
+    this.material.uniforms.size.value.set(lw, lh);
+  }
+
+  remove() {
+    scene.remove(this.stand);
+    this.target?.dispose();
   }
 
   // 보이는 파츠만 재서 발바닥이 0, 가운데가 x=z=0이 되게 옮깁니다.
@@ -147,72 +337,85 @@ class Figure {
     this.model.updateMatrixWorld(true);
     const toModel = this.model.matrixWorld.clone().invert();
     const box = new THREE.Box3();
-    for (const part of Object.values(this.parts)) {
+    // 강아지는 파츠가 없어서 통째로 잽니다.
+    const parts = this.breed ? [this.model] : Object.values(this.parts);
+    for (const part of parts) {
       if (!part.visible) continue;
       part.traverse((object) => {
         if (!object.isMesh) return;
-        if (!object.geometry.boundingBox) object.geometry.computeBoundingBox();
-        box.union(object.geometry.boundingBox.clone()
-          .applyMatrix4(toModel.clone().multiply(object.matrixWorld)));
+        // 뼈가 있는 메시는 뼈 변형까지 넣어서 잽니다. (파일 안 숫자 그대로는 크기가 다릅니다)
+        let local;
+        if (object.isSkinnedMesh) {
+          object.computeBoundingBox();
+          local = object.boundingBox;
+        } else {
+          if (!object.geometry.boundingBox) object.geometry.computeBoundingBox();
+          local = object.geometry.boundingBox;
+        }
+        box.union(local.clone().applyMatrix4(toModel.clone().multiply(object.matrixWorld)));
       });
     }
     if (box.isEmpty()) return;
     const center = box.getCenter(new THREE.Vector3());
     this.model.position.sub(new THREE.Vector3(center.x, box.min.y, center.z));
-    this.height = box.max.y - box.min.y;
+    this.rawHeight = box.max.y - box.min.y;
   }
 
   play(name, delay = 0) {
-    this.action = { name, start: performance.now() / 1000 + delay };
+    this.action = { name, start: performance.now() / 1000 + delay, shot: false };
   }
 
-  update(t) {
+  update(t, dt) {
     const H = this.height;
     // 가만히 있을 때도 숨을 쉽니다. (2.8초에 한 번, 키가 1%쯤 늘었다 줄었다)
-    const breathe = Math.sin((t + this.breath) * Math.PI * 2 / 2.8);
+    // 대결처럼 동작을 틀고 있을 때는 동작이 알아서 들썩이니 숨쉬기를 끕니다.
+    const breathe = this.base ? 0 : Math.sin((t + this.breath) * Math.PI * (this.breed ? 2 / 2.2 : 2 / 2.8));
     const p = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0.008 * breathe, sy: 1 + 0.011 * breathe };
     let flash = 0;
+    if (this.moving && !this.base) {
+      // 동작 파일 없이 걷기 (강아지): 종종걸음처럼 통통
+      const step = Math.abs(Math.sin(t * 13));
+      p.y = 0.045 * H * step;
+      p.rz += 0.03 * Math.sin(t * 13);
+    }
     const a = this.action;
     const u = a ? t - a.start : -1;
     if (a && u >= 0) {
+      if (!a.shot) {
+        a.shot = true;
+        this.shoot(a.name); // 펀치·맞기 동작 (피하기는 동작 파일이 없어 아래에서 몸을 옮깁니다)
+      }
+      const real = Boolean(this.shots[a.name]);
       if (a.name === 'attack') {
-        // 0~0.18 뒤로 젖혔다가, 0.18~0.3 앞으로 확, 0.3~0.6 돌아오기
-        const windup = u < 0.18 ? ease(u / 0.18) : Math.max(0, 1 - (u - 0.18) / 0.08);
-        const lunge = u < 0.18 ? 0 : u < 0.3 ? ease((u - 0.18) / 0.12) : 1 - ease((u - 0.3) / 0.3);
-        p.rx = -0.18 * windup + 0.32 * lunge;
-        p.ry = -0.35 * windup + 0.25 * lunge;
-        p.z = -0.03 * H * windup + 0.3 * H * lunge;
-        p.sy *= 1 + 0.04 * lunge;
+        // 주먹이 닿을 때(IMPACT)에 맞춰 상대 쪽으로 한 발 다가갔다가 돌아옵니다.
+        const lunge = u < IMPACT ? ease(u / IMPACT) : 1 - ease((u - IMPACT) / 0.3);
+        p.z = (real ? 0.22 : 0.3) * H * lunge;
+        if (!real) p.rx = 0.3 * lunge;
       } else if (a.name === 'hit') {
-        // 뒤로 밀리면서 흔들리고 붉게 번쩍
+        // 뒤로 밀리면서 살짝 붉게
         const knock = u < 0.1 ? ease(u / 0.1) : 1 - ease((u - 0.1) / 0.5);
-        p.z = -0.12 * H * knock;
-        p.rx = -0.22 * knock;
-        p.rz += 0.12 * knock;
+        p.z = -0.1 * H * knock;
+        if (!real) {
+          p.rx = -0.22 * knock;
+          p.rz += 0.12 * knock;
+        }
         p.x = 0.02 * H * Math.sin(u * 70) * Math.max(0, 1 - u / 0.4);
-        p.sy *= 1 - 0.05 * knock;
         flash = Math.max(0, 1 - u / 0.35);
-      } else if (a.name === 'poke') {
-        // 두 번 톡: 붉게 번쩍이고 제자리에서 콩콩 세 번 뜁니다. (약 1초)
-        const hops = Math.abs(Math.sin(Math.PI * 3 * u / 0.95));
-        p.y = 0.09 * H * hops * Math.max(0, 1 - u / 1.1);
-        p.sy *= 1 - 0.05 * (1 - hops) * (u < 0.95 ? 1 : 0);
-        p.rz += 0.06 * Math.sin(Math.PI * 3 * u / 0.95);
-        flash = Math.max(0, 1 - u / 0.5);
       } else {
         // 피하기: 옆으로 쏙 빠졌다 돌아오기
         const side = u < 0.15 ? ease(u / 0.15) : 1 - ease((u - 0.15) / 0.35);
         p.x = 0.18 * H * side;
         p.rz = -0.12 * side;
       }
-      if (u > (a.name === 'poke' ? 1.0 : 0.6)) this.action = null;
+      if (u > 0.6) this.action = null;
     }
+    this.mixer.update(dt);
     this.rig.position.set(p.x, p.y, p.z);
     this.rig.rotation.set(p.rx, p.ry, p.rz);
     this.rig.scale.set(1 / Math.sqrt(p.sy), p.sy, 1 / Math.sqrt(p.sy));
     this.rig.traverse((object) => {
       if (object.isMesh && object.visible && object.material.emissive) {
-        object.material.emissive.copy(red).multiplyScalar(flash * 0.8);
+        object.material.emissive.copy(red).multiplyScalar(flash * 0.4);
       }
     });
   }
@@ -220,6 +423,7 @@ class Figure {
 
 // ---------- 장면 ----------
 let source = null;
+let clips = [];
 let me = null;
 let foe = null;
 
@@ -228,17 +432,53 @@ const SOLO_ANGLE = -0.35;
 // 대결에서는 상대 쪽으로 크게 돌고, 고르기 화면에서는 앞을 보며 살짝만 안쪽으로 돕니다.
 const FACE = params.get('pair') ? 0.3 : 0.85;
 
+// 사람이면 같은 사람 그대로, 강아지 종류가 바뀌었으면 새로 세웁니다.
+function figureFor(current, parts) {
+  const dog = dogOf(parts);
+  const breed = dog?.breed ?? null;
+  if (current && current.breed === breed) return current;
+  current?.remove();
+  return breed
+    ? new Figure(dogSources[breed], [], breed)
+    : new Figure(source, clips);
+}
+
 function setFighters(mine, theirs) {
   if (!source) return;
-  me ??= new Figure(source);
+  if (GUILD) {
+    setGuild(mine, folks.map((folk) => folk.parts ?? []).filter((p) => p.length));
+    return;
+  }
+  // 강아지 모델은 쓸 때 처음 읽어 옵니다. 다 읽으면 다시 부릅니다.
+  const waiting = [dogOf(mine), dogOf(theirs)]
+    .filter((dog) => dog && !dogSources[dog.breed]);
+  if (waiting.length) {
+    Promise.all(waiting.map((dog) => loadDog(dog.breed)))
+      .then(() => setFighters(mine, theirs))
+      .catch((error) => send('error:' + (error?.message || error)));
+    return;
+  }
+  me = figureFor(me, mine);
   me.setOutfit(mine);
+  me.setStyle(dogOf(mine) && DOG_STAGES[dogOf(mine).stage]);
   if (theirs && theirs.length) {
-    foe ??= new Figure(source);
+    foe = figureFor(foe, theirs);
     foe.setOutfit(theirs);
+    foe.setStyle(dogOf(theirs) && DOG_STAGES[dogOf(theirs).stage]);
   } else if (foe) {
-    scene.remove(foe.stand);
+    foe.remove();
     foe = null;
   }
+  // 사람과 강아지가 같이 서면 강아지를 사람 키에 맞춰 작게 세웁니다.
+  for (const [dog, human] of [[me, foe], [foe, me]]) {
+    if (!dog?.breed) continue;
+    dog.setHeight(human && !human.breed ? human.height * DOG_VS_HUMAN : dog.rawHeight);
+  }
+  // 대결에서만 파이팅 자세로 들썩입니다. 내 캐릭터 화면·고르기·얼굴은 숨만 쉽니다.
+  // (서서 쉬는 동작 idle은 바지가 찢어져 보여서 쓰지 않습니다)
+  const fighting = Boolean(foe) && !params.get('pair') && !FACE_ONLY;
+  me.setBase(fighting ? 'fightIdle' : null);
+  foe?.setBase(fighting ? 'fightIdle' : null);
   layout();
 }
 
@@ -247,11 +487,165 @@ function strike(byMe, landed) {
   if (!foe) return;
   const [hitter, target] = byMe ? [me, foe] : [foe, me];
   hitter.play('attack');
-  target.play(landed ? 'hit' : 'dodge', 0.22);
+  target.play(landed ? 'hit' : 'dodge', IMPACT);
 }
 
 window.setFighters = setFighters;
 window.strike = strike;
+
+// ---------- 나의 길드 ----------
+// 배경(방 사진)은 앱이 웹뷰 뒤에 깝니다. 사진 속 나무 바닥에 발이 놓이게, 3D 바닥(y=0)의
+// 뒤쪽 끝과 앞쪽 끝이 화면 높이의 FLOOR_BACK ~ FLOOR_FRONT에 오도록 카메라에 맞춰 잽니다.
+// 원근법은 카메라가 알아서 합니다. 앞(아래)으로 오면 크고, 뒤(위)로 가면 작아집니다.
+const GUILD = Boolean(params.get('guild'));
+// 앱이 배경 사진을 화면에 맞춰 깔고 나서 바닥 위치를 fb, ff로 알려 줍니다. (화면 맨 위 0, 맨 아래 1)
+const FLOOR_BACK = Number(params.get('fb')) || 0.8;
+const FLOOR_FRONT = Number(params.get('ff')) || 0.97;
+const SIDE_MARGIN = 0.07; // 화면 양옆 여백 (화면 너비 대비)
+const HUMAN_H = 1.13; // 사람이 없을 때 강아지 크기를 맞추는 사람 키
+// 초당 움직이는 거리 (사람 키 기준)
+const WALK_SPEED = 1.1;
+const RUN_SPEED = 2.6;
+const move = { x: 0, y: 0 }; // 조이스틱 (오른쪽 +x, 위 +y)
+const floor = { back: -4, front: 2 };
+let folks = []; // 친구들 { fig, goal: {x, z}, wait }
+
+const parseFriends = (value) => (value || '').split(';').map(listOf).filter((p) => p.length);
+
+// 화면 높이 비율(0=위) -> 바닥의 z
+function zAtScreen(yRatio) {
+  let lo = -60, hi = camera.position.z - 0.5;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    v.set(0, 0, mid).project(camera);
+    const y = (1 - v.y) / 2;
+    if (y < yRatio) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+// 이 깊이(z)에서 화면 밖으로 나가지 않는 x의 한계
+function xLimit(z) {
+  const a = new THREE.Vector3(0, 0, z).project(camera);
+  const b = new THREE.Vector3(1, 0, z).project(camera);
+  const perUnit = (b.x - a.x) / 2; // 화면 너비 비율
+  return Math.max(0.2, (0.5 - SIDE_MARGIN) / Math.max(perUnit, 1e-6));
+}
+
+function clampToFloor(pos) {
+  pos.z = Math.min(floor.front, Math.max(floor.back, pos.z));
+  const lim = xLimit(pos.z);
+  pos.x = Math.min(lim, Math.max(-lim, pos.x));
+}
+
+function randomSpot() {
+  const z = floor.back + Math.random() * (floor.front - floor.back);
+  const lim = xLimit(z) * 0.9;
+  return { x: (Math.random() * 2 - 1) * lim, z };
+}
+
+// 한 사람을 (dx, dz) 쪽으로 speed만큼. 바라보는 방향도 천천히 돌립니다.
+function steer(fig, dx, dz, speed, dt, clip) {
+  const H = fig.breed ? fig.height / DOG_VS_HUMAN : fig.height;
+  if (speed > 0) {
+    fig.stand.position.x += dx * speed * H * dt;
+    fig.stand.position.z += dz * speed * H * dt;
+    clampToFloor(fig.stand.position);
+    const want = Math.atan2(dx, dz);
+    let diff = want - fig.stand.rotation.y;
+    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+    fig.stand.rotation.y += diff * Math.min(1, dt * 10);
+  }
+  fig.setMotion(speed > 0 ? clip : null);
+}
+
+function guildFigures() {
+  return [me, ...folks.map((f) => f.fig)].filter(Boolean);
+}
+
+// 키 맞추기: 강아지는 사람 키의 절반 남짓
+function fitGuildHeights() {
+  const human = guildFigures().find((f) => !f.breed);
+  const humanH = human ? human.height : HUMAN_H;
+  for (const f of guildFigures()) if (f.breed) f.setHeight(humanH * DOG_VS_HUMAN);
+}
+
+function setGuild(mine, friends) {
+  if (!source) return;
+  const all = [mine, ...friends];
+  const waiting = all.map(dogOf).filter((dog) => dog && !dogSources[dog.breed]);
+  if (waiting.length) {
+    Promise.all(waiting.map((dog) => loadDog(dog.breed)))
+      .then(() => setGuild(mine, friends))
+      .catch((error) => send('error:' + (error?.message || error)));
+    return;
+  }
+  const fresh = !me;
+  me = figureFor(me, mine);
+  me.setOutfit(mine);
+  me.setStyle(dogOf(mine) && DOG_STAGES[dogOf(mine).stage]);
+  // 친구는 순서대로 다시 맞춥니다. 남는 자리는 지웁니다.
+  for (const extra of folks.slice(friends.length)) extra.fig.remove();
+  folks = friends.map((parts, i) => {
+    const old = folks[i];
+    const fig = figureFor(old?.fig, parts);
+    fig.setOutfit(parts);
+    fig.setStyle(dogOf(parts) && DOG_STAGES[dogOf(parts).stage]);
+    const folk = old && old.fig === fig ? old : { fig, goal: null, wait: Math.random() * 2, placed: false };
+    folk.parts = parts;
+    return folk;
+  });
+  fitGuildHeights();
+  layout();
+  if (fresh) {
+    me.stand.position.set(0, 0, floor.back + (floor.front - floor.back) * 0.7);
+  }
+  for (const folk of folks) {
+    if (folk.placed) continue;
+    const spot = randomSpot();
+    folk.fig.stand.position.set(spot.x, 0, spot.z);
+    folk.fig.stand.rotation.y = Math.random() * Math.PI * 2;
+    folk.placed = true;
+  }
+}
+
+function updateGuild(dt) {
+  if (!me) return;
+  const m = Math.min(1, Math.hypot(move.x, move.y));
+  if (m < 0.12) {
+    steer(me, 0, 0, 0, dt, null);
+  } else {
+    // 조이스틱 위 = 방 안쪽(화면 위, -z)
+    const running = m > 0.72;
+    const speed = running ? RUN_SPEED : WALK_SPEED * (0.6 + 0.4 * m);
+    steer(me, move.x / m, -move.y / m, speed, dt, running ? 'run' : 'walk');
+  }
+  for (const folk of folks) {
+    const pos = folk.fig.stand.position;
+    if (folk.wait > 0) {
+      folk.wait -= dt;
+      steer(folk.fig, 0, 0, 0, dt, null);
+      continue;
+    }
+    folk.goal ??= randomSpot();
+    const dx = folk.goal.x - pos.x, dz = folk.goal.z - pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 0.08) {
+      folk.goal = null;
+      folk.wait = 1 + Math.random() * 3; // 잠깐 멈춰 섰다가 다시 걷습니다.
+      steer(folk.fig, 0, 0, 0, dt, null);
+      continue;
+    }
+    steer(folk.fig, dx / d, dz / d, WALK_SPEED * 0.8, dt, 'walk');
+  }
+}
+
+window.setGuild = setGuild;
+window.setMove = (x, y) => {
+  move.x = Number(x) || 0;
+  move.y = Number(y) || 0;
+};
 
 let angle = SOLO_ANGLE;
 
@@ -266,7 +660,9 @@ function layout() {
   const H = Math.max(me?.height ?? 1, foe?.height ?? 0);
   // 가운데에서 한 사람까지의 거리. 고르기 화면은 세로로 길어서 더 붙여 세웁니다.
   const gap = H * (params.get('pair') ? 0.36 : 0.5);
-  if (foe) {
+  if (GUILD) {
+    // 자리는 걸어 다니며 바뀝니다.
+  } else if (foe) {
     me.stand.position.set(-gap, 0, 0);
     me.stand.rotation.y = FACE;
     foe.stand.position.set(gap, 0, 0);
@@ -275,7 +671,22 @@ function layout() {
     me.stand.position.set(0, 0, 0);
     me.stand.rotation.y = angle;
   }
+  me?.resize();
+  foe?.resize();
+  for (const folk of folks) folk.fig.resize();
   const fov = THREE.MathUtils.degToRad(camera.fov);
+  if (GUILD) {
+    // 조금 위에서 내려다보는 카메라. 바닥의 앞뒤 끝은 화면 비율로 잽니다.
+    camera.zoom = 1;
+    camera.position.set(0, 4.6, 17);
+    camera.lookAt(0, 1.6, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
+    floor.back = zAtScreen(FLOOR_BACK);
+    floor.front = zAtScreen(FLOOR_FRONT);
+    for (const f of guildFigures()) clampToFloor(f.stand.position);
+    return;
+  }
   if (FACE_ONLY) {
     // 머리(키의 위쪽 40% 정도)만 화면에 차게
     const fit = Math.max(H * 0.56, (H * 0.56) / camera.aspect);
@@ -284,7 +695,8 @@ function layout() {
     camera.lookAt(0, H * 0.74, 0);
   } else {
     // 머리부터 발까지 들어오고 위아래로 조금 여유가 남는 거리
-    const wide = foe ? gap * 2 + H * 0.7 : H * 0.9;
+    // 강아지는 옆으로 길어서 혼자 설 때 가로 여유를 더 둡니다.
+    const wide = foe ? gap * 2 + H * 0.7 : H * (me?.breed ? 1.25 : 0.9);
     const fit = Math.max(H * (foe ? 1.12 : 1.2), wide / camera.aspect);
     const distance = fit / (2 * Math.tan(fov / 2));
     camera.position.set(0, H * 0.5, distance);
@@ -294,34 +706,68 @@ function layout() {
 }
 window.addEventListener('resize', layout);
 
-// ---------- 손가락으로 돌리기 (내 캐릭터 화면, 가로로만) ----------
+// ---------- 손가락 (내 캐릭터 화면) ----------
+// 한 손가락: 가로로 끌면 돕니다.   두 손가락: 벌리고 오므려 확대 (1 ~ 1.28배)
+const MAX_ZOOM = 1.28;
+const fingers = new Map(); // pointerId -> x, y
 let dragX = null, spin = 0;
-let lastTap = 0, tapX = 0;
+let pinch = null; // { distance, zoom } 두 손가락을 댄 순간
+
+const spread = () => {
+  const [a, b] = [...fingers.values()];
+  return Math.hypot(a.x - b.x, a.y - b.y);
+};
+
+function setZoom(z) {
+  camera.zoom = Math.min(MAX_ZOOM, Math.max(1, z));
+  camera.updateProjectionMatrix();
+}
+
 renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (GUILD) return;
+  fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (fingers.size === 2) {
+    pinch = { distance: spread(), zoom: camera.zoom };
+    dragX = null;
+    return;
+  }
   dragX = e.clientX;
   spin = 0;
-  // 0.3초 안에 같은 자리를 두 번 치면 콩콩
-  const now = performance.now();
-  if (!foe && me && now - lastTap < 300 && Math.abs(e.clientX - tapX) < 30) {
-    me.play('poke');
-    lastTap = 0;
-  } else {
-    lastTap = now;
-    tapX = e.clientX;
-  }
 });
 window.addEventListener('pointermove', (e) => {
+  if (!fingers.has(e.pointerId)) return;
+  fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && fingers.size === 2) {
+    setZoom(pinch.zoom * spread() / Math.max(1, pinch.distance));
+    return;
+  }
   if (dragX === null) return;
   spin = (e.clientX - dragX) * 0.012;
   dragX = e.clientX;
   angle += spin;
 });
-window.addEventListener('pointerup', () => { dragX = null; });
-window.addEventListener('pointercancel', () => { dragX = null; });
+const lift = (e) => {
+  fingers.delete(e.pointerId);
+  if (fingers.size < 2) pinch = null;
+  dragX = null;
+};
+window.addEventListener('pointerup', lift);
+window.addEventListener('pointercancel', lift);
+// 컴퓨터에서 볼 때는 휠로 확대
+renderer.domElement.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (GUILD) return;
+  setZoom(camera.zoom * (e.deltaY < 0 ? 1.05 : 1 / 1.05));
+}, { passive: false });
 
+let lastT = null;
 function animate(ms) {
   const t = ms / 1000;
-  if (!foe && me) {
+  const dt = lastT === null ? 0 : Math.min(0.1, t - lastT);
+  lastT = t;
+  if (GUILD) {
+    updateGuild(dt);
+  } else if (!foe && me) {
     if (dragX === null) {
       // 놓으면 조금 미끄러지다가 그 방향에 멈춰 섭니다.
       spin *= 0.9;
@@ -329,15 +775,31 @@ function animate(ms) {
     }
     me.stand.rotation.y = angle;
   }
-  me?.update(t);
-  foe?.update(t);
-  filter.uniforms.seed.value = Math.floor(t * 12) % 97; // 노이즈를 1초에 12번 바꿉니다
+  me?.update(t, dt);
+  foe?.update(t, dt);
+  for (const folk of folks) folk.fig.update(t, dt);
+  const seed = Math.floor(t * 12) % 97; // 노이즈를 1초에 12번 바꿉니다
+  filter.uniforms.seed.value = seed;
+  camera.layers.set(0);
   renderer.setRenderTarget(low);
   renderer.clear();
   renderer.render(scene, camera);
+  const styled = [me, foe, ...folks.map((folk) => folk.fig)].filter((f) => f && f.style);
+  for (const f of styled) {
+    f.material.uniforms.seed.value = seed;
+    camera.layers.set(f.layer);
+    renderer.setRenderTarget(f.target);
+    renderer.clear();
+    renderer.render(scene, camera);
+  }
+  camera.layers.set(0);
   renderer.setRenderTarget(null);
   renderer.clear();
   renderer.render(screen, screenCamera);
+  // 그림체가 다른 캐릭터(강아지 1·2단계)를 위에 얹습니다.
+  renderer.autoClear = false;
+  for (const f of styled) renderer.render(f.screen, screenCamera);
+  renderer.autoClear = true;
   requestAnimationFrame(animate);
 }
 
@@ -345,10 +807,15 @@ new GLTFLoader().load(
   '../models/character.glb',
   (gltf) => {
     source = gltf.scene;
+    clips = gltf.animations;
     source.traverse((object) => {
       if (object.isMesh && object.material.metalnessMap === null) object.material.metalness = 0;
     });
-    setFighters(listOf(params.get('me')), listOf(params.get('foe')));
+    if (GUILD) {
+      setGuild(listOf(params.get('me')), parseFriends(params.get('friends')));
+    } else {
+      setFighters(listOf(params.get('me')), listOf(params.get('foe')));
+    }
     requestAnimationFrame(animate);
     send('ready');
   },

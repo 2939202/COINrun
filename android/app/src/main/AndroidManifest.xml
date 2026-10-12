@@ -20,7 +20,7 @@
     <!-- 안드로이드 13부터 알림을 보여주려면 필요합니다. 없어도 서비스는 돌아갑니다. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
-        android:label="달리랑 RPG"
+        android:label="코인런"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
@@ -46,6 +46,19 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!--
+              친구 링크 coinrun://app/player/<uid>
+              플레이어 카드 QR을 휴대폰 카메라로 찍거나 공유받은 링크를 누르면 이 앱이 열립니다.
+              링크는 MainActivity가 받아서 Flutter로 넘깁니다. (services/link_service.dart)
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="coinrun" android:host="app" android:pathPrefix="/player"/>
+            </intent-filter>
+            <!-- Flutter가 링크를 화면 이동(라우트)으로 바꾸지 않게 끕니다. 링크는 직접 처리합니다. -->
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

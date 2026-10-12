@@ -28,14 +28,18 @@ class CharacterStrike {
 // 웹뷰 안에서 three.js로 assets/models/character.glb를 띄웁니다.
 // (assets/viewer/index.html, 파일은 services/asset_server.dart가 내줍니다)
 //
-//   me만 주면     내 캐릭터 화면. 한 명이 가만히 서 있고, 가로로 끌면 돕니다.
+//   me만 주면     내 캐릭터 화면. 한 명이 숨 쉬며 서 있고, 끌면 돌고 벌리면 커집니다.
 //   foe도 주면    게임 플레잉 대결. 두 명이 마주 보고, strike가 오면 치고 맞습니다.
 //   pair: true    캐릭터 고르기. 두 명이 나란히 앞을 봅니다.
+//   강아지 캐릭터는 me/foe에 ['dog:husky:2']처럼 넘깁니다. (game/character_outfit.dart)
 //
 // 홈 카드의 얼굴은 3D가 아니라, 같은 뷰어(?face=1)로 미리 찍어 둔 그림입니다.
 // (assets/icons/face_*.png) 홈은 자주 열려서 웹뷰를 띄우지 않습니다.
 //
 // 그림체는 픽셀 느낌에 잔잔한 노이즈를 얹은 것입니다. (뷰어의 "필터")
+//
+//   guild: true   나의 길드. friends가 혼자 돌아다니고, 나는 move(조이스틱)로 걷고 뜁니다.
+//                 floorBack/floorFront: 배경 사진 속 바닥의 뒤·앞 끝 (화면 높이 비율, 위 0)
 //
 // 켤 파츠는 game/character_outfit.dart가 정합니다. 옷이 바뀌면 바로 갈아입힙니다.
 // 3D를 못 띄우면 "보이지 않아요"만 띄웁니다.
@@ -46,12 +50,24 @@ class CharacterView extends StatefulWidget {
   final CharacterStrike? strike;
   final bool pair;
 
+  // 나의 길드
+  final bool guild;
+  final List<List<String>> friends;
+  final ValueListenable<Offset>? move; // 조이스틱 (오른쪽 +x, 위 +y, 길이 0~1)
+  final double floorBack;
+  final double floorFront;
+
   const CharacterView({
     super.key,
     required this.me,
     this.foe,
     this.strike,
     this.pair = false,
+    this.guild = false,
+    this.friends = const [],
+    this.move,
+    this.floorBack = 0.8,
+    this.floorFront = 0.97,
   });
 
   @override
@@ -70,13 +86,35 @@ class _CharacterViewState extends State<CharacterView> {
   @override
   void initState() {
     super.initState();
+    widget.move?.addListener(_sendMove);
     _open();
   }
 
   @override
   void dispose() {
+    widget.move?.removeListener(_sendMove);
     _watchdog?.cancel();
     super.dispose();
+  }
+
+  // 조이스틱이 움직일 때마다 바로 넘깁니다.
+  void _sendMove() {
+    if (!_ready) return;
+    final Offset move = widget.move?.value ?? Offset.zero;
+    _controller?.runJavaScript(
+      'setMove(${move.dx.toStringAsFixed(3)}, ${move.dy.toStringAsFixed(3)})',
+    );
+  }
+
+  static String _friendsParam(List<List<String>> friends) =>
+      friends.map((parts) => parts.join(',')).join(';');
+
+  static bool _sameFriends(List<List<String>> a, List<List<String>> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (!listEquals(a[i], b[i])) return false;
+    }
+    return true;
   }
 
   Future<void> _open() async {
@@ -91,6 +129,12 @@ class _CharacterViewState extends State<CharacterView> {
         'me': widget.me.join(','),
         if (widget.foe != null) 'foe': widget.foe!.join(','),
         if (widget.pair) 'pair': '1',
+        if (widget.guild) ...{
+          'guild': '1',
+          'friends': _friendsParam(widget.friends),
+          'fb': widget.floorBack.toStringAsFixed(4),
+          'ff': widget.floorFront.toStringAsFixed(4),
+        },
       });
       final WebViewController controller = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -125,7 +169,18 @@ class _CharacterViewState extends State<CharacterView> {
   @override
   void didUpdateWidget(CharacterView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.move != widget.move) {
+      oldWidget.move?.removeListener(_sendMove);
+      widget.move?.addListener(_sendMove);
+    }
     if (!_ready) return;
+    if (widget.guild) {
+      if (!listEquals(oldWidget.me, widget.me) ||
+          !_sameFriends(oldWidget.friends, widget.friends)) {
+        _sendFighters();
+      }
+      return;
+    }
     if (!listEquals(oldWidget.me, widget.me) ||
         !listEquals(oldWidget.foe, widget.foe)) {
       _sendFighters();
@@ -137,7 +192,9 @@ class _CharacterViewState extends State<CharacterView> {
   }
 
   void _sendFighters() => _controller?.runJavaScript(
-    'setFighters(${jsonEncode(widget.me)}, ${jsonEncode(widget.foe)})',
+    widget.guild
+        ? 'setGuild(${jsonEncode(widget.me)}, ${jsonEncode(widget.friends)})'
+        : 'setFighters(${jsonEncode(widget.me)}, ${jsonEncode(widget.foe)})',
   );
 
   @override
@@ -160,11 +217,10 @@ class _CharacterViewState extends State<CharacterView> {
             opacity: _ready ? 1 : 0,
             child: WebViewWidget(
               controller: controller,
-              // 가로로 끌면 캐릭터가 돌고, 세로로 끌면 화면이 스크롤됩니다.
+              // 손가락은 전부 웹뷰가 받습니다. (돌리기, 두 손가락 확대, 두 번 톡)
+              // 이 위젯을 쓰는 화면은 스크롤하지 않아서 빼앗길 것이 없습니다.
               gestureRecognizers: {
-                Factory<HorizontalDragGestureRecognizer>(
-                  HorizontalDragGestureRecognizer.new,
-                ),
+                Factory<EagerGestureRecognizer>(EagerGestureRecognizer.new),
               },
             ),
           ),

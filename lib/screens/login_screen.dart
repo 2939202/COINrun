@@ -138,7 +138,7 @@ class _LoginScreenState extends State<LoginScreen> {
             if (!_isLinking) ...[
               const SizedBox(height: AppSpacing.xl),
               Text(
-                '달리랑\nRPG',
+                '코인런',
                 style: textTheme.displayLarge?.copyWith(fontSize: 56),
               ),
               const SizedBox(height: AppSpacing.md),

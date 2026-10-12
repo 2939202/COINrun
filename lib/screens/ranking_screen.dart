@@ -349,79 +349,53 @@ class _RankRow extends StatelessWidget {
   }
 }
 
-// 등수 동그라미.
-//   1등은 채워진 원, 2등은 테두리, 3등은 점선, 그 아래는 숫자만.
+// 등수 동그라미. 1~3등은 금·은·동으로 칠하고, 그 아래는 숫자만.
 class _RankBadge extends StatelessWidget {
   final int rank;
   final bool isMe;
 
   const _RankBadge({required this.rank, required this.isMe});
 
+  // 금, 은, 동 (채움색, 테두리색). 쨍한 금색은 싸 보여서 채도를 죽인 바랜 톤으로 씁니다.
+  // (러닝 화면 금색 버튼과 같은 놋쇠 계열)
+  static const List<(Color, Color)> _medals = [
+    (Color(0xFFCDB68A), Color(0xFF9A8158)),
+    (Color(0xFFCFCCC6), Color(0xFF9C988F)),
+    (Color(0xFFC4A089), Color(0xFF8F6E58)),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final TextStyle number = AppTheme.number.copyWith(
-      fontSize: 15,
-      color: isMe ? AppColors.white : AppColors.black,
-    );
-
     if (rank > 3) {
       return SizedBox(
         width: 34,
-        child: Center(child: Text('$rank', style: number)),
+        child: Center(
+          child: Text(
+            '$rank',
+            style: AppTheme.number.copyWith(
+              fontSize: 15,
+              color: isMe ? AppColors.white : AppColors.black,
+            ),
+          ),
+        ),
       );
     }
-
-    return SizedBox(
+    final (Color fill, Color edge) = _medals[rank - 1];
+    return Container(
       width: 34,
       height: 34,
-      child: CustomPaint(
-        painter: _BadgePainter(rank: rank),
-        child: Center(child: Text('$rank', style: number)),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: fill,
+        border: Border.all(color: edge, width: 1.6),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        '$rank',
+        style: AppTheme.number.copyWith(fontSize: 15, color: AppColors.black),
       ),
     );
   }
-}
-
-class _BadgePainter extends CustomPainter {
-  final int rank;
-
-  const _BadgePainter({required this.rank});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = size.center(Offset.zero);
-    final double radius = size.shortestSide / 2 - 1;
-
-    if (rank == 1) {
-      canvas.drawCircle(center, radius, Paint()..color = AppColors.sand);
-    }
-
-    final stroke = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4
-      ..color = AppColors.accent;
-
-    if (rank == 3) {
-      // 3등은 점선 테두리
-      const int dashes = 16;
-      const double sweep = 6.283185 / dashes;
-      for (int i = 0; i < dashes; i += 2) {
-        canvas.drawArc(
-          Rect.fromCircle(center: center, radius: radius),
-          i * sweep,
-          sweep,
-          false,
-          stroke,
-        );
-      }
-      return;
-    }
-
-    canvas.drawCircle(center, radius, stroke);
-  }
-
-  @override
-  bool shouldRepaint(_BadgePainter oldDelegate) => oldDelegate.rank != rank;
 }
 
 // 기준에 맞는 값을 글자로
